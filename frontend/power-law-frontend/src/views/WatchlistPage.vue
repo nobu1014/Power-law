@@ -10,7 +10,7 @@
   }
 
   type SymbolItem = {
-    symbolCode: string
+    symbol: string
     market: string
   }
 
@@ -36,7 +36,7 @@
    */
   const loadSymbols = async () => {
     const res = await api.get<SymbolItem[]>('/symbols')
-    symbols.value = res.data.map(s => s.symbolCode)
+    symbols.value = res.data.map(s => s.symbol)
   }
 
   /**

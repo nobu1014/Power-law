@@ -7,9 +7,8 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://localhost:7216', // ← APIのURL
+        target: 'http://localhost:5287', // ★ 実際に起動しているAPI
         changeOrigin: true,
-        secure: false, // https自己署名対策
       },
     },
   },
