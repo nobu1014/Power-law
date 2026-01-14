@@ -59,7 +59,7 @@
    * 初期ロード
    * ============================= */
   onMounted(async () => {
-    const res = await api.get<WatchlistItem[]>('/api/analysis/watchlist')
+    const res = await api.get<WatchlistItem[]>('/analysis/watchlist')
     watchlist.value = res.data
     if (watchlist.value.length > 0) {
       selectedSymbol.value = watchlist.value[0]!.symbol
@@ -81,7 +81,7 @@
     // 銘柄はここで正規化（backend と完全一致させる）
     const symbol = selectedSymbol.value.trim().toUpperCase()
 
-    const res = await api.post('/api/analysis/execute', {
+    const res = await api.post('/analysis/execute', {
       symbol,
       market: 'US',
       baseYears: baseYears.value ?? undefined,
