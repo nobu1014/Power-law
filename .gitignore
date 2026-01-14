@@ -1,0 +1,18 @@
+# ===== Frontend (Vue / Vite) =====
+frontend/power-law-frontend/dist/
+frontend/power-law-frontend/node_modules/
+frontend/power-law-frontend/node_modules/.vite/
+
+# ===== Backend (.NET) =====
+backend/StockCheck.Api/bin/
+backend/StockCheck.Api/obj/
+
+# ===== Publish / Deploy =====
+deploy/
+
+# ===== Logs =====
+*.log
+RELEASE.log
+
+# installer / temp
+*.deb
