@@ -1,74 +1,77 @@
 using System.Diagnostics;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace StockCheck.Api.Services;
 
-/// <summary>
-/// 外部データ取得（Python 呼び出し専用）
-/// </summary>
 public class ExternalDataImporter
 {
-    private const string PythonProjectRoot = @"C:\Power-law\python";
-    private const string PythonExePath =
-        @"C:\Power-law\python\.venv\Scripts\python.exe";
+    private readonly string _pythonProjectRoot;
+    private readonly string _pythonExePath;
+    private readonly ILogger<ExternalDataImporter> _logger;
 
-    // =====================================================
-    // 株価（日次）
-    // =====================================================
-    public async Task ImportPriceAsync(string symbol, DateTime fromDate)
+    public ExternalDataImporter(
+        IConfiguration config,
+        ILogger<ExternalDataImporter> logger)
     {
-        await RunPythonAsync(
-            scriptRelativePath: @"src\scripts\import_price_daily.py",
-            args: $"{symbol} {fromDate:yyyy-MM-dd}"
-        );
+        _pythonProjectRoot =
+            config["Python:ProjectRoot"]
+            ?? throw new InvalidOperationException("Python:ProjectRoot not configured");
+
+        _pythonExePath =
+            config["Python:PythonExe"]
+            ?? throw new InvalidOperationException("Python:PythonExe not configured");
+
+        _logger = logger;
     }
 
-    // =====================================================
-    // EPS（四半期）
-    // =====================================================
-    public async Task ImportEpsAsync(string symbol, int maxCount)
-    {
-        await RunPythonAsync(
-            scriptRelativePath: @"src\scripts\import_eps_quarterly.py",
-            args: $"{symbol} {maxCount}"
+    public Task ImportPriceAsync(string symbol, DateTime fromDate)
+        => RunPythonAsync(
+            "src/scripts/import_price_daily.py",
+            $"{symbol} {fromDate:yyyy-MM-dd}"
         );
-    }
 
-    // =====================================================
-    // Python 実行共通処理
-    // =====================================================
-    private static async Task RunPythonAsync(string scriptRelativePath, string args)
+    public Task ImportEpsAsync(string symbol, int maxCount)
+        => RunPythonAsync(
+            "src/scripts/import_eps_quarterly.py",
+            $"{symbol} {maxCount}"
+        );
+
+    private async Task RunPythonAsync(string scriptRelativePath, string args)
     {
-        var scriptFullPath = Path.Combine(PythonProjectRoot, scriptRelativePath);
+        var scriptPath = Path.Combine(_pythonProjectRoot, scriptRelativePath);
 
         var psi = new ProcessStartInfo
         {
-            FileName = PythonExePath,
-            Arguments = $"\"{scriptFullPath}\" {args}",
-            WorkingDirectory = PythonProjectRoot,
-
-            Environment =
-            {
-                ["PYTHONPATH"] = Path.Combine(PythonProjectRoot, "src")
-            },
-
+            FileName = _pythonExePath,                 // ← /usr/bin/python3
+            Arguments = $"\"{scriptPath}\" {args}",
+            WorkingDirectory = _pythonProjectRoot,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
 
-        using var process = Process.Start(psi)
-            ?? throw new InvalidOperationException("Failed to start python process.");
+        psi.Environment["PYTHONPATH"] =
+        Path.Combine(_pythonProjectRoot, "src");
 
-        var stdOut = await process.StandardOutput.ReadToEndAsync();
-        var stdErr = await process.StandardError.ReadToEndAsync();
+        _logger.LogInformation("Python start: {Script} {Args}", scriptRelativePath, args);
+
+        using var process = Process.Start(psi)
+            ?? throw new InvalidOperationException("Failed to start python process");
+
+        var stdout = await process.StandardOutput.ReadToEndAsync();
+        var stderr = await process.StandardError.ReadToEndAsync();
 
         await process.WaitForExitAsync();
 
+        if (!string.IsNullOrWhiteSpace(stdout))
+            _logger.LogInformation(stdout);
+
+        if (!string.IsNullOrWhiteSpace(stderr))
+            _logger.LogWarning(stderr);
+
         if (process.ExitCode != 0)
-        {
-            throw new InvalidOperationException(
-                $"Python failed: {scriptRelativePath}\n{stdErr}");
-        }
+            throw new InvalidOperationException($"Python failed ({process.ExitCode})");
     }
 }
