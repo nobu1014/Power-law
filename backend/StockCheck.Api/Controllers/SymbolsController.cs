@@ -25,6 +25,7 @@ public class SymbolsController : ControllerBase
     /// 登録後、即フル Import（登録銘柄のみ）
     /// </summary>
     [HttpPost("register")]
+     [AllowAnonymous]
     public async Task<IActionResult> Register(
         [FromBody] RegisterSymbolRequest request,
         CancellationToken ct)
@@ -67,8 +68,8 @@ public class SymbolsController : ControllerBase
     /// <summary>
     /// 銘柄一覧取得
     /// </summary>
-[HttpGet]
-[AllowAnonymous]
+    [HttpGet]
+    [AllowAnonymous]
     public async Task<IActionResult> GetAll()
     {
         var list = await _symbolRepository.GetAllAsync();
@@ -90,6 +91,7 @@ public class SymbolsController : ControllerBase
     /// ※ 現状フロント未使用
     /// </summary>
     [HttpPost("import")]
+     [AllowAnonymous]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> ImportFromFile(
         [FromForm] ImportSymbolsRequest request,
