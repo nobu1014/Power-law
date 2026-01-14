@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using StockCheck.Api.Models.Requests;
 using StockCheck.Api.Repositories;
 using StockCheck.Api.Services;
-
+using Microsoft.AspNetCore.Authorization;
 namespace StockCheck.Api.Controllers;
 
 [ApiController]
@@ -68,6 +68,7 @@ public class SymbolsController : ControllerBase
     /// 銘柄一覧取得
     /// </summary>
 [HttpGet]
+[AllowAnonymous]
     public async Task<IActionResult> GetAll()
     {
         var list = await _symbolRepository.GetAllAsync();
