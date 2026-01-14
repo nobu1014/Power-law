@@ -59,6 +59,11 @@
           登録
         </v-btn>
 
+        <v-alert v-if="loading" type="info" variant="tonal" class="mt-4">
+          株価・EPSデータを取得しています。<br />
+          初回登録や銘柄数が多い場合、数十秒かかることがあります。
+        </v-alert>
+
         <v-alert v-if="errorMessage" type="error" variant="tonal" class="mt-4">
           {{ errorMessage }}
         </v-alert>

@@ -24,7 +24,6 @@ public class WatchlistController : ControllerBase
     /// <summary>
     /// ウォッチリスト一覧取得
     /// </summary>
-    /// <returns>ウォッチリスト一覧</returns>
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
@@ -34,7 +33,7 @@ public class WatchlistController : ControllerBase
 
     /// <summary>
     /// ウォッチリストへ追加
-    /// （既に存在する場合は何もしない）
+    /// （symbols はフロントの v-select で制御）
     /// </summary>
     [HttpPost("add")]
     public async Task<IActionResult> Add([FromBody] WatchlistRequest request)

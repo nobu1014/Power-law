@@ -1,6 +1,7 @@
 using StockCheck.Api.Repositories;
 using StockCheck.Api.Infrastructure;
 using StockCheck.Api.Services;
+using StockCheck.Api.BackgroundServices;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,11 +36,16 @@ builder.Services.AddScoped<EpsPriceRepository>();
 builder.Services.AddScoped<ExternalDataImporter>();
 builder.Services.AddScoped<DrawdownRepository>();
 
+
 // Services
 builder.Services.AddScoped<AnalysisService>();
 builder.Services.AddScoped<DrawdownService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddSingleton<PasswordHasher>();
+builder.Services.AddScoped<ImportService>();
+builder.Services.AddHostedService<ImportBackgroundService>();
+
+
 
 // Swagger
 builder.Services.AddEndpointsApiExplorer();

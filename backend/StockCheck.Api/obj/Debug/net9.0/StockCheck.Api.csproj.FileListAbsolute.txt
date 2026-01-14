@@ -21,6 +21,7 @@ C:\Power-law\backend\StockCheck.Api\obj\Debug\net9.0\StockCheck.Api.AssemblyInfo
 C:\Power-law\backend\StockCheck.Api\obj\Debug\net9.0\StockCheck.Api.csproj.CoreCompileInputs.cache
 C:\Power-law\backend\StockCheck.Api\obj\Debug\net9.0\StockCheck.Api.MvcApplicationPartsAssemblyInfo.cs
 C:\Power-law\backend\StockCheck.Api\obj\Debug\net9.0\StockCheck.Api.MvcApplicationPartsAssemblyInfo.cache
+C:\Power-law\backend\StockCheck.Api\obj\Debug\net9.0\StockCheck.Api.sourcelink.json
 C:\Power-law\backend\StockCheck.Api\obj\Debug\net9.0\rjimswa.dswa.cache.json
 C:\Power-law\backend\StockCheck.Api\obj\Debug\net9.0\rjsmrazor.dswa.cache.json
 C:\Power-law\backend\StockCheck.Api\obj\Debug\net9.0\rjsmcshtml.dswa.cache.json

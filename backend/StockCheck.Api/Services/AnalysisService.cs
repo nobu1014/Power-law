@@ -11,10 +11,10 @@ namespace StockCheck.Api.Services;
 /// 【責務】
 /// ・入力正規化
 /// ・watchlist / symbols 登録保証
-/// ・Repository から取得した完成データを
+/// ・DB から取得したデータを
 ///   画面表示用レスポンスに組み立てる
 ///
-/// ※ 計算・JOIN・並び順は DB VIEW に委譲
+/// ※ 外部API取得は ImportService に完全委譲
 /// </summary>
 public class AnalysisService
 {
@@ -22,29 +22,21 @@ public class AnalysisService
     private readonly WatchlistRepository _watchlistRepository;
     private readonly PriceDailyRepository _priceDailyRepository;
     private readonly EpsPriceRepository _epsPriceRepository;
-    private readonly ExternalDataImporter _externalImporter;
-
-     private readonly DrawdownRepository _drawdownRepository;
 
     public AnalysisService(
         SymbolRepository symbolRepository,
         WatchlistRepository watchlistRepository,
         PriceDailyRepository priceDailyRepository,
-        EpsPriceRepository epsPriceRepository,
-        ExternalDataImporter externalImporter,
-        DrawdownRepository drawdownRepository
-        )
+        EpsPriceRepository epsPriceRepository)
     {
         _symbolRepository = symbolRepository;
         _watchlistRepository = watchlistRepository;
         _priceDailyRepository = priceDailyRepository;
         _epsPriceRepository = epsPriceRepository;
-         _externalImporter = externalImporter; 
-         _drawdownRepository = drawdownRepository;
     }
 
     /// <summary>
-    /// 株価分析を実行する（Phase0）
+    /// 株価分析を実行する（DB参照のみ）
     /// </summary>
     public async Task<AnalysisResponse> AnalyzeAsync(AnalysisRequest request)
     {
@@ -57,72 +49,14 @@ public class AnalysisService
         await _watchlistRepository.AddAsync(symbol, market);
         await _symbolRepository.InsertIfNotExistsAsync(symbol, market);
 
-        var symbolEntity = await _symbolRepository.GetBySymbolAsync(symbol, market)
+        var symbolEntity =
+            await _symbolRepository.GetBySymbolAsync(symbol, market)
             ?? throw new InvalidOperationException("Symbol registration failed.");
 
         var symbolId = symbolEntity.Id;
 
         // =====================================================
-        // ② 外部データ取得判定
-        // =====================================================
-
-        // ---- Price ----
-        var latestTradeDate =
-            await _priceDailyRepository.GetLatestTradeDateAsync(symbolId);
-
-        var latestBusinessDay = GetLatestBusinessDay(DateTime.Today);
-
-        var needPriceImport =
-            latestTradeDate == null ||
-            latestTradeDate < latestBusinessDay;
-
-
-        // ---- EPS ----
-        var epsRange = Math.Clamp(request.EpsRange ?? 4, 4, 16);
-        var epsCount = await _epsPriceRepository.CountAsync(symbolId);
-
-        var needEpsImport = epsCount < epsRange;
-
-        // =====================================================
-        // ③ 外部データ取得（並列）
-        // =====================================================
-        Task? priceTask = null;
-        Task? epsTask = null;
-
-        if (needPriceImport)
-            priceTask = _externalImporter.ImportPriceAsync(symbol);
-
-        if (needEpsImport)
-            epsTask = _externalImporter.ImportEpsAsync(symbol);
-
-        // Price は必ず待つ（UX最優先）
-        if (priceTask != null)
-        {
-            try
-            {
-                await priceTask;
-            }
-            catch (Exception ex)
-            {
-                // Phase0：既存DBデータで表示継続
-                // TODO: ILogger 追加時に LogError
-            }
-        }
-
-        // EPS は裏で処理（ログだけ拾う）
-        if (epsTask != null)
-        {
-            _ = epsTask.ContinueWith(t =>
-            {
-                if (t.Exception != null)
-                {
-                    // TODO: ILogger 追加時に LogError
-                }
-            }, TaskContinuationOptions.OnlyOnFaulted);
-        }
-
-        // =====================================================
-        // ④ 株価（日次）
+        // ② 株価（日次）
         // =====================================================
         var today = DateTime.Today;
         var baseYears = Math.Clamp(request.BaseYears ?? 3, 1, 5);
@@ -134,13 +68,15 @@ public class AnalysisService
         var latestPrice = await _priceDailyRepository.GetLatestAsync(symbolId);
 
         // =====================================================
-        // ⑤ EPS（四半期）
+        // ③ EPS（四半期）
         // =====================================================
+        var epsRange = Math.Clamp(request.EpsRange ?? 4, 4, 16);
+
         var epsPriceRows = await _epsPriceRepository
             .GetRecentAsync(symbolId, epsRange);
 
         // =====================================================
-        // ⑥ 株価レスポンス
+        // ④ 株価レスポンス
         // =====================================================
         var priceResponse = new PriceAnalysisResponse
         {
@@ -164,15 +100,17 @@ public class AnalysisService
             priceResponse.FixedAverages["YTD"] = ytd.Average(p => p.ClosePrice);
 
         // =====================================================
-        // ⑦ EPS レスポンス
+        // ⑤ EPS レスポンス
         // =====================================================
         var epsResponse = new EpsAnalysisResponse();
 
         foreach (var row in epsPriceRows)
         {
+            var period = $"{row.FiscalYear}Q{row.FiscalQuarter}";
+
             epsResponse.Table.Add(new EpsTableRow
             {
-                Period = $"{row.FiscalYear}Q{row.FiscalQuarter}",
+                Period = period,
                 Value = row.Eps,
                 Change = null,
                 ChangeRate = null
@@ -180,18 +118,17 @@ public class AnalysisService
 
             epsResponse.EpsList.Add(new EpsPoint
             {
-                Period = $"{row.FiscalYear}Q{row.FiscalQuarter}",
+                Period = period,
                 Value = row.Eps
             });
         }
-
 
         AddAverage(epsPriceRows, 2, epsResponse.Averages);
         AddAverage(epsPriceRows, 3, epsResponse.Averages);
         AddAverage(epsPriceRows, 4, epsResponse.Averages);
 
         // =====================================================
-        // ⑧ PER レスポンス
+        // ⑥ PER レスポンス
         // =====================================================
         var perResponse = new PerAnalysisResponse();
 
@@ -216,7 +153,7 @@ public class AnalysisService
         }
 
         // =====================================================
-        // ⑨ レスポンス
+        // ⑦ レスポンス
         // =====================================================
         return new AnalysisResponse
         {
@@ -241,9 +178,7 @@ public class AnalysisService
         var from = DateTime.Today.AddDays(-days);
         var list = prices.Where(p => p.TradeDate >= from).ToList();
         if (list.Any())
-        {
             result[key] = list.Average(p => p.ClosePrice);
-        }
     }
 
     private static void AddAverage(
@@ -253,20 +188,6 @@ public class AnalysisService
     {
         var list = rows.Take(count).ToList();
         if (list.Any())
-        {
             result[$"{count}AVG"] = list.Average(r => r.Eps);
-        }
     }
-
-    //直近営業日を求める
-        private static DateTime GetLatestBusinessDay(DateTime today)
-    {
-        return today.DayOfWeek switch
-        {
-            DayOfWeek.Saturday => today.AddDays(-1), // 金曜
-            DayOfWeek.Sunday   => today.AddDays(-2), // 金曜
-            _                  => today.AddDays(-1), // 平日は前日
-        };
-    }
-
 }

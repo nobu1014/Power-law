@@ -5,16 +5,15 @@ from datetime import datetime
 from powerlaw.settings import settings
 from powerlaw.db import get_connection
 
-MAX_QUARTERS = 16  # 最大16期（4年分）
+# ===== 最大保存期数（分析画面最大）=====
+MAX_QUARTERS = 16
+
 
 def get_symbol_id(conn, symbol: str, market: str = "US") -> int:
-    """
-    symbols テーブルに銘柄を登録し、IDを取得
-    """
     with conn.cursor() as cur:
         cur.execute(
             """
-            INSERT INTO symbols (symbol, market)
+            INSERT INTO power_test.symbols (symbol, market)
             VALUES (%s, %s)
             ON CONFLICT (symbol, market) DO NOTHING
             """,
@@ -23,15 +22,17 @@ def get_symbol_id(conn, symbol: str, market: str = "US") -> int:
         conn.commit()
 
         cur.execute(
-            "SELECT id FROM symbols WHERE symbol = %s AND market = %s",
+            """
+            SELECT id
+            FROM power_test.symbols
+            WHERE symbol = %s AND market = %s
+            """,
             (symbol, market),
         )
         return cur.fetchone()[0]
 
 
 def fetch_eps(symbol: str) -> list[dict]:
-    print("API KEY =", settings.ALPHA_VANTAGE_API_KEY)
-
     params = {
         "function": "EARNINGS",
         "symbol": symbol,
@@ -39,27 +40,18 @@ def fetch_eps(symbol: str) -> list[dict]:
     }
 
     r = requests.get(settings.ALPHA_VANTAGE_BASE_URL, params=params, timeout=20)
-    print("STATUS =", r.status_code)
-    print("RAW RESPONSE =", r.text)   # ← 超重要
-
     r.raise_for_status()
     data = r.json()
 
-    if "Note" in data:
-        raise RuntimeError(data["Note"])
-    if "Error Message" in data:
-        raise RuntimeError(data["Error Message"])
+    if "Note" in data or "Information" in data or "Error Message" in data:
+        raise RuntimeError(str(data))
 
     return data.get("quarterlyEarnings", [])
 
 
-
 def upsert_eps(conn, symbol_id: int, rows: list[dict]):
-    """
-    EPS（四半期）を直近16期まで保存
-    """
     sql = """
-    INSERT INTO eps_quarterly (
+    INSERT INTO power_test.eps_quarterly (
         symbol_id,
         fiscal_year,
         fiscal_quarter,
@@ -73,7 +65,6 @@ def upsert_eps(conn, symbol_id: int, rows: list[dict]):
         report_date = EXCLUDED.report_date
     """
 
-    # ===== 直近16期だけに制限 =====
     limited_rows = rows[:MAX_QUARTERS]
 
     with conn.cursor() as cur:
@@ -94,9 +85,12 @@ def upsert_eps(conn, symbol_id: int, rows: list[dict]):
         conn.commit()
 
 
-
 def main():
-    symbol = sys.argv[1].upper() if len(sys.argv) >= 2 else "AAPL"
+    if len(sys.argv) < 2:
+        print("Usage: python import_eps_quarterly.py <SYMBOL>")
+        sys.exit(1)
+
+    symbol = sys.argv[1].upper()
 
     conn = get_connection()
     try:
@@ -104,7 +98,7 @@ def main():
         rows = fetch_eps(symbol)
         upsert_eps(conn, symbol_id, rows)
 
-        print(f"[OK] EPS imported: {symbol} ({len(rows)} records)")
+        print(f"[OK] eps_quarterly imported ({len(rows)} rows): {symbol}")
     finally:
         conn.close()
 

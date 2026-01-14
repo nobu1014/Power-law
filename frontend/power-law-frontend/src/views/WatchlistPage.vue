@@ -9,14 +9,21 @@
     createdAt: string
   }
 
+  type SymbolItem = {
+    symbolCode: string
+    market: string
+  }
+
   const list = ref<WatchlistItem[]>([])
-  const input = ref('')
+  const symbols = ref<string[]>([]) // ← 文字列配列にする
+  const selectedSymbol = ref<string | null>(null)
+
   const loading = ref(false)
   const errorMessage = ref('')
   const snackbar = ref(false)
 
   /**
-   * 一覧取得
+   * ウォッチリスト一覧取得
    */
   const load = async () => {
     const res = await api.get<WatchlistItem[]>('/watchlist')
@@ -24,31 +31,34 @@
   }
 
   /**
-   * 追加（カンマ区切り）
+   * symbols 一覧取得
+   * → symbol だけ抜き出す
+   */
+  const loadSymbols = async () => {
+    const res = await api.get<SymbolItem[]>('/symbols')
+    symbols.value = res.data.map(s => s.symbolCode)
+  }
+
+  /**
+   * 追加
    */
   const add = async () => {
-    if (!input.value) return
+    if (!selectedSymbol.value) return
 
     loading.value = true
     errorMessage.value = ''
 
-    const symbols = input.value
-      .split(',')
-      .map(s => s.trim())
-      .filter(Boolean)
-
     try {
-      for (const symbol of symbols) {
-        await api.post('/watchlist/add', {
-          symbol,
-          market: 'US',
-        })
-      }
+      await api.post('/watchlist/add', {
+        symbol: selectedSymbol.value,
+        market: 'US',
+      })
 
-      input.value = ''
+      selectedSymbol.value = null
       snackbar.value = true
       await load()
-    } catch {
+    } catch (e) {
+      console.error(e)
       errorMessage.value = 'ウォッチリストの追加に失敗しました'
     } finally {
       loading.value = false
@@ -66,29 +76,31 @@
     await load()
   }
 
-  onMounted(load)
+  onMounted(async () => {
+    await loadSymbols()
+    await load()
+  })
 </script>
-
 <template>
   <v-container>
     <v-card max-width="800" class="mx-auto mt-6 pa-6">
-      <v-card-title class="text-h6"> ウォッチリスト </v-card-title>
+      <v-card-title class="text-h6">ウォッチリスト</v-card-title>
 
       <v-card-text>
-        <!-- 追加 -->
-        <v-text-field
-          v-model="input"
-          label="銘柄追加（カンマ区切り）"
-          placeholder="AAPL,TSLA,NVDA"
+        <!-- 銘柄選択（string[]） -->
+        <v-select
+          v-model="selectedSymbol"
+          :items="symbols"
+          label="銘柄を選択"
+          clearable
           variant="outlined"
         />
 
         <v-btn
           color="primary"
-          variant="elevated"
-          width="150"
+          class="mt-2"
+          :disabled="!selectedSymbol"
           :loading="loading"
-          :disabled="!input"
           @click="add"
         >
           追加
@@ -100,7 +112,6 @@
 
         <v-divider class="my-6" />
 
-        <!-- 一覧 -->
         <v-table>
           <thead>
             <tr>

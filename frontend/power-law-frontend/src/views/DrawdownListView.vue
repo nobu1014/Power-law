@@ -52,12 +52,13 @@
 </script>
 
 <template>
-  <v-container>
-    <v-card class="mx-auto mt-6 pa-6" max-width="1000">
-      <v-card-title class="text-h6">株価分析</v-card-title>
-      <v-card-text>
-        <v-row>
-          <v-col cols="3">
+  <v-container fluid class="pa-0 pa-md-4">
+    <v-card class="mx-auto mt-2 mt-md-6 pa-2 pa-md-6 drawdown-root" max-width="1000">
+      <v-card-title class="text-h6">下落チェック</v-card-title>
+
+      <v-card-text class="pa-0 pa-md-4">
+        <v-row class="mt-1" dense>
+          <v-col cols="12" md="3">
             <v-select
               v-model="periodMonths"
               :items="periodOptions"
@@ -65,18 +66,17 @@
               hide-details
               variant="outlined"
               label="対象期間"
-              style="max-width: 180px"
-              class="mr-3"
+              class="w-100"
             />
           </v-col>
-          <v-col cols="2">
+
+          <v-col cols="12" md="2">
             <v-btn color="primary" block :loading="loading" :disabled="loading" @click="load">
               実行
             </v-btn>
           </v-col>
         </v-row>
 
-        <!-- ===== テーブル ===== -->
         <v-data-table
           :headers="headers"
           :items="items"
@@ -84,10 +84,11 @@
           hide-default-footer
           height="300"
           fixed-header
-          class="drawdown-table"
+          class="drawdown-table mt-2"
+          density="compact"
+          :mobile-breakpoint="0"
           @click:row="handleRowClick"
         >
-          <!-- ★ 列幅制御 -->
           <template #colgroup>
             <col style="width: 25%" />
             <col style="width: 25%" />
@@ -95,19 +96,8 @@
             <col style="width: 25%" />
           </template>
 
-          <template #headers>
-            <tr>
-              <th class="text-center">銘柄</th>
-              <th class="text-center">最高値</th>
-              <th class="text-center">現在値</th>
-              <th class="text-center">下落率</th>
-            </tr>
-          </template>
-
           <template #item.symbol="{ value }">
-            <span class="font-weight-medium">
-              {{ value }}
-            </span>
+            <span class="font-weight-medium">{{ value }}</span>
           </template>
 
           <template #item.peakPrice="{ value }">
@@ -120,7 +110,7 @@
 
           <template #item.drawdownRate="{ value }">
             <v-chip
-              size="small"
+              size="x-small"
               :color="drawdownColor(value)"
               variant="flat"
               class="font-weight-medium"
@@ -133,3 +123,13 @@
     </v-card>
   </v-container>
 </template>
+
+<style lang="css">
+  /* スマホはカード感を消して幅を最大化 */
+  @media (max-width: 600px) {
+    .drawdown-root {
+      border-radius: 0;
+      box-shadow: none;
+    }
+  }
+</style>

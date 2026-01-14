@@ -1,7 +1,6 @@
 <script setup lang="ts">
   import { ref, onMounted, computed } from 'vue'
   import { api } from '../lib/api'
-
   import type { ChartOptions } from 'chart.js'
 
   /* ===== Chart.js ===== */
@@ -358,14 +357,13 @@
 </script>
 
 <template>
-  <v-container>
-    <v-card class="mx-auto mt-6 pa-6" max-width="1000">
+  <v-container fluid class="pa-0 pa-md-4">
+    <v-card class="analysis-root pa-2 pa-md-6">
       <v-card-title class="text-h6">株価分析</v-card-title>
-
-      <v-card-text>
+      <v-card-text class="pa-0 pa-md-4">
         <!-- 銘柄 & 実行 -->
         <v-row>
-          <v-col cols="4">
+          <v-col cols="12" md="4">
             <v-combobox
               v-model="selectedSymbol"
               :items="watchlist.map(w => w.symbol)"
@@ -378,22 +376,23 @@
             />
           </v-col>
 
-          <v-col cols="2">
+          <v-col cols="12" md="2">
             <v-btn color="primary" block :loading="loading" :disabled="loading" @click="execute">
               分析実行
             </v-btn>
           </v-col>
 
-          <v-col cols="2">
+          <v-col cols="12" md="2">
             <v-btn block disabled>スプシ出力</v-btn>
           </v-col>
         </v-row>
 
         <!-- 任意条件 -->
-        <v-row>
+        <v-row class="mt-2">
+          <!-- 基準期間 -->
           <v-col cols="12" md="5">
-            <v-card class="pa-4" variant="elevated">
-              <div class="text-subtitle-2 font-weight-medium mb-3">📈 株価分析・基準期間</div>
+            <div class="option-block">
+              <div class="option-title">📈 株価分析・基準期間</div>
 
               <v-chip-group
                 v-model="baseYears"
@@ -406,38 +405,30 @@
                   :key="year"
                   :value="year"
                   variant="outlined"
-                  class="ma-1"
+                  size="small"
                 >
                   直近 {{ year }} 年
                 </v-chip>
               </v-chip-group>
-
-              <div class="text-caption text-medium-emphasis mt-2">
-                ※ 短期（1M / 2M / 6M）・YTD は自動計算
-              </div>
-            </v-card>
+            </div>
           </v-col>
+
+          <!-- EPS / PER -->
           <v-col cols="12" md="7">
-            <!-- EPS / PER 分析レンジ -->
-            <v-card class="pa-4 mb-4" variant="elevated">
-              <div class="text-subtitle-2 font-weight-medium mb-3">📊 EPS / PER 分析レンジ</div>
+            <div class="option-block">
+              <div class="option-title">📊 EPS / PER 分析レンジ</div>
 
               <v-chip-group v-model="epsRange" mandatory selected-class="bg-primary text-white">
-                <v-chip :value="4" variant="outlined">直近 4 期</v-chip>
-                <v-chip :value="8" variant="outlined">直近 8 期</v-chip>
-                <v-chip :value="12" variant="outlined">直近 12 期</v-chip>
-                <v-chip :value="16" variant="outlined">直近 16 期</v-chip>
+                <v-chip size="small" :value="4">4期</v-chip>
+                <v-chip size="small" :value="8">8期</v-chip>
+                <v-chip size="small" :value="12">12期</v-chip>
+                <v-chip size="small" :value="16">16期</v-chip>
               </v-chip-group>
-
-              <div class="text-caption text-medium-emphasis mt-2">
-                ※ EPS / PER の計算対象となる決算データの範囲
-              </div>
-            </v-card>
+            </div>
           </v-col>
         </v-row>
 
-        <!-- 表示切替 -->
-        <v-btn-toggle v-model="displayMode" class="my-4" mandatory divided>
+        <v-btn-toggle v-model="displayMode" class="my-4 toggle-compact" mandatory divided>
           <v-btn value="price">株価</v-btn>
           <v-btn value="eps">EPS</v-btn>
           <v-btn value="per">PER</v-btn>
@@ -464,7 +455,7 @@
           </div>
 
           <!-- グラフ本体 -->
-          <div class="chart-wrapper" style="height: 320px">
+          <div class="chart-wrapper chart-height">
             <Line :data="chartData" :options="chartOptions" />
           </div>
         </v-card>
@@ -543,6 +534,10 @@
           height="300"
           fixed-header
         >
+          <template #item.value="{ value }">
+            <span v-if="value !== null">{{ value.toFixed(2) }}</span>
+          </template>
+
           <template #item.change="{ value }">
             <span v-if="value !== null" :class="value >= 0 ? 'text-success' : 'text-error'">
               {{ value.toFixed(2) }}
@@ -565,5 +560,33 @@
     padding: 12px;
     border-radius: 8px;
     background: linear-gradient(to bottom, rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0));
+  }
+
+  .chart-height {
+    height: 320px;
+  }
+
+  /* ===== 任意条件ブロック ===== */
+  .option-block {
+    padding: 8px 4px;
+  }
+
+  .option-title {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  /* ===== 画面全体のルート ===== */
+  .analysis-root {
+    max-width: 100%;
+  }
+
+  /* ===== スマホではカード感を消す ===== */
+  @media (max-width: 600px) {
+    .analysis-root {
+      border-radius: 0;
+      box-shadow: none;
+    }
   }
 </style>
