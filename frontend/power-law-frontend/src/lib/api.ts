@@ -1,4 +1,4 @@
-import axios from "axios"
+import axios from 'axios'
 
 /**
  * Axios 共通クライアント
@@ -9,7 +9,7 @@ import axios from "axios"
  */
 export const api = axios.create({
   // Swagger が動いている URL の「/swagger」より前
-  baseURL: 'https://power-law.site/api',
+  baseURL: 'http://localhost:5287',
 
   // JSON API 前提
   headers: {
