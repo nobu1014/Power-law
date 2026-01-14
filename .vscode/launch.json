@@ -1,0 +1,20 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "StockCheck.Api Debug",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/StockCheck.Api/bin/Debug/net9.0/StockCheck.Api.dll",
+      "cwd": "${workspaceFolder}/backend/StockCheck.Api",
+      "stopAtEntry": false,
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "Now listening on:\\s+(https?://\\S+)"
+      }
+    }
+  ]
+}

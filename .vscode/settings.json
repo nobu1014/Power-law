@@ -1,0 +1,30 @@
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+
+  "cSpell.words": [
+    "ALPHAVANTAGE",
+    "apikey",
+    "appsettings",
+    "ASPNETCORE",
+    "avgs",
+    "chartjs",
+    "dotenv",
+    "materialdesignicons",
+    "MMXP",
+    "nobu",
+    "Npgsql",
+    "outputsize",
+    "powerlaw",
+    "PYTHONPATH",
+    "TRUNC",
+    "venv",
+    "VKEUJZ",
+    "vuetify",
+    "Watchlist"
+  ]
+}

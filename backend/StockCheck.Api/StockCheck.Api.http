@@ -1,0 +1,6 @@
+@StockCheck.Api_HostAddress = http://localhost:5287
+
+GET {{StockCheck.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
