@@ -1,7 +1,7 @@
 import Axios from 'axios'
 
 const axios = Axios.create({
-  baseURL: 'http://localhost:5287', // ← backend の URL
+  baseURL: 'https://power-law.site/api', // ← backend の URL
   withCredentials: false,
   headers: {
     'Content-Type': 'application/json',

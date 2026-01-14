@@ -9,10 +9,10 @@ import axios from "axios"
  */
 export const api = axios.create({
   // Swagger が動いている URL の「/swagger」より前
-  baseURL: "http://localhost:5287",
+  baseURL: 'https://power-law.site/api',
 
   // JSON API 前提
   headers: {
-    "Content-Type": "application/json",
+    'Content-Type': 'application/json',
   },
 })
