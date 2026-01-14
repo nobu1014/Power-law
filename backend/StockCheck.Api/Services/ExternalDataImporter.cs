@@ -8,6 +8,7 @@ public class ExternalDataImporter
 {
     private readonly string _pythonProjectRoot;
     private readonly string _pythonExePath;
+    private readonly string _pythonSrcPath;
     private readonly ILogger<ExternalDataImporter> _logger;
 
     public ExternalDataImporter(
@@ -21,6 +22,8 @@ public class ExternalDataImporter
         _pythonExePath =
             config["Python:PythonExe"]
             ?? throw new InvalidOperationException("Python:PythonExe not configured");
+
+        _pythonSrcPath = Path.Combine(_pythonProjectRoot, "src");
 
         _logger = logger;
     }
@@ -43,7 +46,7 @@ public class ExternalDataImporter
 
         var psi = new ProcessStartInfo
         {
-            FileName = _pythonExePath,                 // ← /usr/bin/python3
+            FileName = _pythonExePath,
             Arguments = $"\"{scriptPath}\" {args}",
             WorkingDirectory = _pythonProjectRoot,
             RedirectStandardOutput = true,
@@ -52,8 +55,8 @@ public class ExternalDataImporter
             CreateNoWindow = true
         };
 
-        psi.Environment["PYTHONPATH"] =
-        Path.Combine(_pythonProjectRoot, "src");
+        // ★ ここが今回の本質
+        psi.Environment["PYTHONPATH"] = _pythonSrcPath;
 
         _logger.LogInformation("Python start: {Script} {Args}", scriptRelativePath, args);
 
