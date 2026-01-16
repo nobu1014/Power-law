@@ -1,7 +1,10 @@
 <script setup lang="ts">
-  import { ref, onMounted } from 'vue'
+  import { ref, onMounted, computed } from 'vue'
   import { api } from '../lib/api'
 
+  /**
+   * ウォッチリスト行
+   */
   type WatchlistItem = {
     id: number
     symbol: string
@@ -9,13 +12,16 @@
     createdAt: string
   }
 
+  /**
+   * symbols テーブルの1行
+   */
   type SymbolItem = {
-    symbolCode: string
+    symbol: string
     market: string
   }
 
   const list = ref<WatchlistItem[]>([])
-  const symbols = ref<string[]>([]) // ← 文字列配列にする
+  const symbols = ref<string[]>([])
   const selectedSymbol = ref<string | null>(null)
 
   const loading = ref(false)
@@ -25,19 +31,28 @@
   /**
    * ウォッチリスト一覧取得
    */
-  const load = async () => {
+  const loadWatchlist = async () => {
     const res = await api.get<WatchlistItem[]>('/watchlist')
     list.value = res.data
   }
 
   /**
    * symbols 一覧取得
-   * → symbol だけ抜き出す
    */
   const loadSymbols = async () => {
     const res = await api.get<SymbolItem[]>('/symbols')
-    symbols.value = res.data.map(s => s.symbolCode)
+    symbols.value = res.data.map(s => s.symbol)
   }
+
+  /**
+   * ★ 選択可能な銘柄
+   * ・symbols に存在
+   * ・watchlist に未登録
+   */
+  const selectableSymbols = computed(() => {
+    const registered = new Set(list.value.map(x => x.symbol))
+    return symbols.value.filter(s => !registered.has(s))
+  })
 
   /**
    * 追加
@@ -56,7 +71,8 @@
 
       selectedSymbol.value = null
       snackbar.value = true
-      await load()
+
+      await loadWatchlist()
     } catch (e) {
       console.error(e)
       errorMessage.value = 'ウォッチリストの追加に失敗しました'
@@ -73,27 +89,31 @@
       symbol: item.symbol,
       market: item.market,
     })
-    await load()
+
+    await loadWatchlist()
   }
 
   onMounted(async () => {
     await loadSymbols()
-    await load()
+    await loadWatchlist()
   })
 </script>
+
 <template>
   <v-container>
     <v-card max-width="800" class="mx-auto mt-6 pa-6">
       <v-card-title class="text-h6">ウォッチリスト</v-card-title>
 
       <v-card-text>
-        <!-- 銘柄選択（string[]） -->
-        <v-select
+        <!-- 銘柄選択 -->
+        <v-autocomplete
           v-model="selectedSymbol"
-          :items="symbols"
+          :items="selectableSymbols"
           label="銘柄を選択"
           clearable
           variant="outlined"
+          :filter="true"
+          no-data-text="選択可能な銘柄がありません"
         />
 
         <v-btn
@@ -112,12 +132,13 @@
 
         <v-divider class="my-6" />
 
+        <!-- 一覧 -->
         <v-table>
           <thead>
             <tr>
               <th>銘柄</th>
               <th>市場</th>
-              <th></th>
+              <th class="text-right"></th>
             </tr>
           </thead>
           <tbody>

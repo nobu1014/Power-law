@@ -21,7 +21,7 @@ public sealed class DrawdownRepository
         int periodMonths,
         string sortOrder)
     {
-        var orderDir = sortOrder == "asc" ? "ASC" : "ASC";
+        var orderDir = sortOrder == "asc" ? "ASC" : "DESC";
 
         var sql = $@"
         WITH latest_price AS (

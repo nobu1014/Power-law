@@ -1,103 +1,126 @@
-import sys
-import requests
-from datetime import datetime, timedelta
+# import_price_daily_api.py
+# → 株価（日次）データを外部APIから取得し、JSONで返すためのスクリプト
+# → full / compact の判断は C# 側が行い、Pythonはその指示に従うだけ
 
-from powerlaw.settings import settings
-from powerlaw.db import get_connection
-
-# ===== 最大保存年数（分析画面の最大）=====
-MAX_YEARS = 5
-
-
-def get_symbol_id(conn, symbol: str, market: str = "US") -> int:
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            INSERT INTO power_test.symbols (symbol, market)
-            VALUES (%s, %s)
-            ON CONFLICT (symbol, market) DO NOTHING
-            """,
-            (symbol, market),
-        )
-        conn.commit()
-
-        cur.execute(
-            """
-            SELECT id
-            FROM power_test.symbols
-            WHERE symbol = %s AND market = %s
-            """,
-            (symbol, market),
-        )
-        return cur.fetchone()[0]
+import argparse        # コマンドライン引数（--symbol, --from, --to）を扱うための標準ライブラリ
+import json            # Pythonの辞書をJSON文字列に変換するためのライブラリ
+import sys             # プログラムの終了コード（exit）などを制御するためのライブラリ
+import requests        # HTTP通信（API呼び出し）を簡単に行うための外部ライブラリ
+from datetime import datetime
+from powerlaw.settings import settings  # APIキーやベースURLなどの設定を読み込む
 
 
-def fetch_daily_prices(symbol: str) -> dict:
-    params = {
-        "function": "TIME_SERIES_DAILY_ADJUSTED",
-        "symbol": symbol,
-        "apikey": settings.ALPHA_VANTAGE_API_KEY,
-        "outputsize": "full",
-    }
+def fetch_daily_prices(symbol: str, from_date: str, to_date: str, outputsize: str) -> list[dict]:
+    """
+    指定された銘柄(symbol)・期間(from_date〜to_date)について、
+    Alpha Vantage APIから日次株価を取得し、
+    C#が扱いやすい形式のリスト(dict配列)に変換して返す
 
-    r = requests.get(settings.ALPHA_VANTAGE_BASE_URL, params=params, timeout=30)
-    r.raise_for_status()
-    data = r.json()
-
-    if "Note" in data or "Error Message" in data:
-        raise RuntimeError(str(data))
-
-    return data
-
-
-def upsert_prices(conn, symbol_id: int, data: dict):
-    series = data.get("Time Series (Daily)", {})
-
-    today = datetime.utcnow().date()
-    cutoff_date = today - timedelta(days=365 * MAX_YEARS)
-
-    sql = """
-    INSERT INTO power_test.price_daily (
-        symbol_id,
-        trade_date,
-        close_price
-    )
-    VALUES (%s, %s, %s)
-    ON CONFLICT (symbol_id, trade_date)
-    DO UPDATE SET
-        close_price = EXCLUDED.close_price
+    注意:
+    - from/to は Alpha Vantage API のパラメータではない
+    - APIが返した結果を Python 側でフィルタしているだけ
     """
 
-    with conn.cursor() as cur:
-        for date_str, values in series.items():
-            trade_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    # Alpha Vantage の日次株価（調整後）APIに渡すパラメータを定義する
+    params = {
+        "function": "TIME_SERIES_DAILY_ADJUSTED",  # 調整後株価（日次）を取得するAPI
+        "symbol": symbol,                          # 対象の銘柄コード（例: MSFT）
+        "apikey": settings.ALPHA_VANTAGE_API_KEY,  # 環境設定から読み込んだAPIキー
+        "outputsize": outputsize,                  # C#の判断をそのまま反映（compact / full）
+    }
 
-            if trade_date < cutoff_date:
-                continue
+    # Alpha Vantage API に HTTP GET リクエストを送信する
+    r = requests.get(
+        settings.ALPHA_VANTAGE_BASE_URL,
+        params=params,
+        timeout=30
+    )
 
-            close_price = float(values["5. adjusted close"])
+    # HTTPステータスコードが 200系 でなければ例外を発生させる
+    r.raise_for_status()
 
-            cur.execute(sql, (symbol_id, trade_date, close_price))
+    # APIレスポンス（JSON文字列）をPythonの辞書型に変換する
+    data = r.json()
 
-        conn.commit()
+    # API制限・エラーが含まれていた場合は異常終了とする
+    if "Note" in data or "Information" in data or "Error Message" in data:
+        raise RuntimeError(str(data))
+
+    # 株価データ本体（日付ごとのデータ）を取得する
+    series = data.get("Time Series (Daily)")
+
+    # データが取得できなかった場合は異常として扱う
+    if not series:
+        raise RuntimeError("Price data is empty")
+
+    # 期間指定の文字列を date 型に変換する
+    from_d = datetime.strptime(from_date, "%Y-%m-%d").date()
+    to_d = datetime.strptime(to_date, "%Y-%m-%d").date()
+
+    result = []
+
+    # APIが返した日付分の株価を1日ずつ処理する
+    for date_str, values in series.items():
+        trade_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+
+        # 指定期間外はスキップ
+        if trade_date < from_d or trade_date > to_d:
+            continue
+
+        close_price = float(values["5. adjusted close"])
+
+        result.append({
+            "date": date_str,
+            "close": close_price
+        })
+
+    # 日付昇順に並び替える（DB保存・分析しやすくするため）
+    result.sort(key=lambda x: x["date"])
+
+    return result
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: python import_price_daily.py <SYMBOL>")
-        sys.exit(1)
+    parser = argparse.ArgumentParser()
 
-    symbol = sys.argv[1].upper()
+    parser.add_argument("--symbol", required=True)
+    parser.add_argument("--from", dest="from_date", required=True)
+    parser.add_argument("--to", dest="to_date", required=True)
 
-    conn = get_connection()
+    # full / compact は C# 側が判断し、Pythonはそのまま従う
+    parser.add_argument(
+        "--outputsize",
+        choices=["compact", "full"],
+        default="compact",
+        help="Alpha Vantage outputsize (compact=~100days, full=all)"
+    )
+
+    args = parser.parse_args()
+    symbol = args.symbol.upper()
+
     try:
-        symbol_id = get_symbol_id(conn, symbol)
-        data = fetch_daily_prices(symbol)
-        upsert_prices(conn, symbol_id, data)
+        prices = fetch_daily_prices(
+            symbol,
+            args.from_date,
+            args.to_date,
+            args.outputsize
+        )
 
-        print(f"[OK] price_daily imported ({MAX_YEARS}Y): {symbol}")
-    finally:
-        conn.close()
+        print(json.dumps({
+            "ok": True,
+            "symbol": symbol,
+            "from": args.from_date,
+            "to": args.to_date,
+            "outputsize": args.outputsize,
+            "prices": prices
+        }, ensure_ascii=False))
+
+    except Exception as e:
+        print(json.dumps({
+            "ok": False,
+            "error": str(e)
+        }, ensure_ascii=False))
+        sys.exit(1)
 
 
 if __name__ == "__main__":

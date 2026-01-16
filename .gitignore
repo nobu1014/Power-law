@@ -16,3 +16,9 @@ RELEASE.log
 
 # installer / temp
 *.deb
+
+# local only
+cookie.txt
+curl
+frontend/npm/
+.vscode/settings.json

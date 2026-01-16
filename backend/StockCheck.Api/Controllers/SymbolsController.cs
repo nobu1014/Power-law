@@ -1,8 +1,8 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using StockCheck.Api.Models.Requests;
 using StockCheck.Api.Repositories;
-using StockCheck.Api.Services;
-using Microsoft.AspNetCore.Authorization;
+
 namespace StockCheck.Api.Controllers;
 
 [ApiController]
@@ -10,58 +10,56 @@ namespace StockCheck.Api.Controllers;
 public class SymbolsController : ControllerBase
 {
     private readonly SymbolRepository _symbolRepository;
-    private readonly ImportService _importService;
 
-    public SymbolsController(
-        SymbolRepository symbolRepository,
-        ImportService importService)
+    public SymbolsController(SymbolRepository symbolRepository)
     {
         _symbolRepository = symbolRepository;
-        _importService = importService;
     }
 
     /// <summary>
     /// 銘柄登録（カンマ区切り対応）
-    /// 登録後、即フル Import（登録銘柄のみ）
+    /// ※ 登録のみ。Import（Python実行）は行わない
     /// </summary>
     [HttpPost("register")]
-     [AllowAnonymous]
+    [AllowAnonymous]
     public async Task<IActionResult> Register(
         [FromBody] RegisterSymbolRequest request,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.Symbols))
-        {
             return BadRequest("Symbols is required.");
-        }
+
+        var market = (request.Market ?? "US").Trim().ToUpperInvariant();
 
         var symbols = request.Symbols
             .Split(',', StringSplitOptions.RemoveEmptyEntries)
-            .Select(s => s.Trim().ToUpper())
+            .Select(s => s.Trim().ToUpperInvariant())
+            .Where(s => !string.IsNullOrWhiteSpace(s))
             .Distinct()
             .ToList();
 
+        var registered = new List<string>();
+        var skipped = new List<string>();
+
         foreach (var symbol in symbols)
         {
-            // ===== 銘柄登録 =====
-            await _symbolRepository.InsertIfNotExistsAsync(
-                symbol,
-                request.Market ?? "US"
-            );
+            // InsertIfNotExistsAsync は
+            // true: 新規登録 / false: 既存でスキップ
+            var inserted =
+                await _symbolRepository.InsertIfNotExistsAsync(symbol, market, ct);
 
-            // ===== 即フル Import（この銘柄のみ）=====
-            await _importService.ImportBySymbolAsync(
-                symbol: symbol,
-                maxPriceYears: 5,
-                maxEpsQuarters: 16,
-                ct: ct
-            );
+            if (inserted) registered.Add(symbol);
+            else skipped.Add(symbol);
         }
 
         return Ok(new
         {
-            registered = symbols.Count,
-            symbols
+            requested = symbols.Count,
+            registered = registered.Count,
+            skipped = skipped.Count,
+            registeredSymbols = registered,
+            skippedSymbols = skipped,
+            market
         });
     }
 
@@ -77,59 +75,11 @@ public class SymbolsController : ControllerBase
         var result = list.Select(s => new
         {
             id = s.Id,
-            symbol = s.SymbolCode,   // ← ここが重要
+            symbol = s.SymbolCode,
             market = s.Market,
             createdAt = s.CreatedAt
         });
 
         return Ok(result);
-    }
-
-
-    /// <summary>
-    /// 銘柄一括登録（CSV / TXT）
-    /// ※ 現状フロント未使用
-    /// </summary>
-    [HttpPost("import")]
-     [AllowAnonymous]
-    [Consumes("multipart/form-data")]
-    public async Task<IActionResult> ImportFromFile(
-        [FromForm] ImportSymbolsRequest request,
-        CancellationToken ct)
-    {
-        if (request.File == null || request.File.Length == 0)
-        {
-            return BadRequest("File is required.");
-        }
-
-        string content;
-        using (var reader = new StreamReader(request.File.OpenReadStream()))
-        {
-            content = await reader.ReadToEndAsync();
-        }
-
-        var symbols = content
-            .Split(',', StringSplitOptions.RemoveEmptyEntries)
-            .Select(s => s.Trim().ToUpper())
-            .Distinct()
-            .ToList();
-
-        foreach (var symbol in symbols)
-        {
-            await _symbolRepository.InsertIfNotExistsAsync(symbol, "US");
-
-            await _importService.ImportBySymbolAsync(
-                symbol: symbol,
-                maxPriceYears: 5,
-                maxEpsQuarters: 16,
-                ct: ct
-            );
-        }
-
-        return Ok(new
-        {
-            count = symbols.Count,
-            symbols
-        });
     }
 }

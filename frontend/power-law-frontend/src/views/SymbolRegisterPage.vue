@@ -9,6 +9,11 @@
   const snackbar = ref(false)
   const errorMessage = ref('')
 
+  // ★ 結果表示用
+  const registeredCount = ref(0)
+  const skippedCount = ref(0)
+  const registeredSymbols = ref<string[]>([])
+
   /**
    * 登録
    */
@@ -19,10 +24,14 @@
     errorMessage.value = ''
 
     try {
-      await api.post('/symbols/register', {
+      const res = await api.post('/symbols/register', {
         symbols: bulkInput.value,
         market: market.value,
       })
+
+      registeredCount.value = res.data.registered
+      skippedCount.value = res.data.skipped ?? 0
+      registeredSymbols.value = res.data.symbols ?? []
 
       snackbar.value = true
       bulkInput.value = ''
@@ -37,7 +46,7 @@
 <template>
   <v-container>
     <v-card max-width="700" class="mx-auto mt-6 pa-6">
-      <v-card-title class="text-h6"> 銘柄登録 </v-card-title>
+      <v-card-title class="text-h6">銘柄登録</v-card-title>
 
       <v-card-text>
         <v-textarea
@@ -67,9 +76,18 @@
         <v-alert v-if="errorMessage" type="error" variant="tonal" class="mt-4">
           {{ errorMessage }}
         </v-alert>
+
+        <!-- ★ 結果表示 -->
+        <v-alert v-if="registeredCount || skippedCount" type="success" variant="tonal" class="mt-4">
+          登録：{{ registeredCount }} 件　 スキップ：{{ skippedCount }} 件
+          <div v-if="registeredSymbols.length" class="mt-2">
+            <strong>登録銘柄：</strong>
+            {{ registeredSymbols.join(', ') }}
+          </div>
+        </v-alert>
       </v-card-text>
     </v-card>
 
-    <v-snackbar v-model="snackbar" color="success"> 銘柄を登録しました </v-snackbar>
+    <v-snackbar v-model="snackbar" color="success"> 銘柄登録が完了しました </v-snackbar>
   </v-container>
 </template>

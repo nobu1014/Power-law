@@ -18,8 +18,12 @@ public class SymbolRepository
 
     /// <summary>
     /// 銘柄を存在しなければ登録する
+    /// true: 新規登録 / false: 既存のためスキップ
     /// </summary>
-    public async Task InsertIfNotExistsAsync(string symbol, string market)
+    public async Task<bool> InsertIfNotExistsAsync(
+        string symbol,
+        string market,
+        CancellationToken ct)
     {
         const string sql = @"
         INSERT INTO power_test.symbols (symbol, market)
@@ -33,7 +37,8 @@ public class SymbolRepository
         cmd.Parameters.AddWithValue("symbol", symbol);
         cmd.Parameters.AddWithValue("market", market);
 
-        await cmd.ExecuteNonQueryAsync();
+        var affected = await cmd.ExecuteNonQueryAsync(ct);
+        return affected > 0;
     }
 
     /// <summary>
@@ -84,7 +89,7 @@ public class SymbolRepository
             created_at
         FROM power_test.symbols
         WHERE symbol = @symbol
-        AND market = @market
+          AND market = @market
         LIMIT 1;
         ";
 

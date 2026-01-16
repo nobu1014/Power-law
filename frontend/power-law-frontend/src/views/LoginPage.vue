@@ -23,21 +23,16 @@
     loading.value = true
 
     try {
-      // AuthController の API を呼び出す
-      const response = await api.post<boolean>('/auth/login', {
+      await api.post('/auth/login', {
         loginId: loginId.value,
         password: password.value,
       })
 
-      // true が返ってきたらログイン成功
-      if (response.data === true) {
-        authStore.loginSuccess()
-        router.push('/analysis')
-      } else {
-        errorMessage.value = 'ログインに失敗しました'
-      }
+      // Cookie が発行されていれば成功
+      authStore.loginSuccess(loginId.value)
+      router.push('/analysis')
     } catch (error) {
-      errorMessage.value = 'サーバーエラーが発生しました'
+      errorMessage.value = 'ログインに失敗しました'
     } finally {
       loading.value = false
     }

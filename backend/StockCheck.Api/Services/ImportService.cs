@@ -1,51 +1,67 @@
-using Microsoft.Extensions.Logging;
+using StockCheck.Api.Models.Import;
 using StockCheck.Api.Repositories;
 
 namespace StockCheck.Api.Services;
 
 /// <summary>
-/// 外部データ Import 業務ロジック
-///
-/// 【責務】
-/// ・差分判定
-/// ・取得範囲決定
-/// ・Python Import 呼び出し
-///
-/// ※ Controller / BackgroundService 共通
+/// 各種Import処理を統括し、銘柄単位・全銘柄単位で実行する司令塔Service
 /// </summary>
-public class ImportService
+public sealed class ImportService
 {
-    private const string DEFAULT_MARKET = "US";
-
     private readonly SymbolRepository _symbolRepository;
-    private readonly PriceDailyRepository _priceDailyRepository;
-    private readonly ExternalDataImporter _externalImporter;
-    private readonly ILogger<ImportService> _logger;
-
-    public ImportService(
-        SymbolRepository symbolRepository,
-        PriceDailyRepository priceDailyRepository,
-        ExternalDataImporter externalImporter,
-        ILogger<ImportService> logger)
-    {
-        _symbolRepository = symbolRepository;
-        _priceDailyRepository = priceDailyRepository;
-        _externalImporter = externalImporter;
-        _logger = logger;
-    }
-
-    // =====================================================
-    // 公開 API
-    // =====================================================
+    private readonly PriceImportService _priceService;
+    private readonly EpsImportService _epsService;
 
     /// <summary>
-    /// 全銘柄 Import（BackgroundService 用）
+    /// Importに必要なRepositoryと各Import Serviceを受け取る
     /// </summary>
-    public async Task ImportAllAsync(
-        int maxPriceYears,
-        int maxEpsQuarters,
+    public ImportService(
+        SymbolRepository symbolRepository,
+        PriceImportService priceService,
+        EpsImportService epsService)
+    {
+        _symbolRepository = symbolRepository;
+        _priceService = priceService;
+        _epsService = epsService;
+    }
+
+    /// <summary>
+    /// 指定銘柄について、株価 → EPS の順でImport処理を実行し、統合サマリを返す
+    /// </summary>
+    public async Task<ImportSummary> ImportBySymbolAsync(
+        string symbol,
+        ImportExecutionContext context,
         CancellationToken ct)
     {
+        // 表記揺れ防止のため正規化する
+        symbol = symbol.Trim().ToUpperInvariant();
+
+        // 日次株価のImportを実行する
+        var priceSummary =
+            await _priceService.ImportAsync(symbol, context, ct);
+
+        // EPS（四半期）のImportを実行する
+        var epsSummary =
+            await _epsService.ImportAsync(symbol, context, ct);
+
+        // 各Import結果をまとめた統合サマリを返す
+        return new ImportSummary
+        {
+            Symbol = symbol,
+            Price = priceSummary,
+            Eps = epsSummary
+        };
+    }
+
+    /// <summary>
+    /// 登録済みの全銘柄に対してImport処理を順次実行し、サマリ一覧を返す
+    /// </summary>
+    public async Task<List<ImportSummary>> ImportAllAsync(
+        CancellationToken ct)
+    {
+        var results = new List<ImportSummary>();
+
+        // symbols テーブルに登録されている全銘柄を取得する
         var symbols = await _symbolRepository.GetAllAsync();
 
         foreach (var s in symbols)
@@ -53,114 +69,31 @@ public class ImportService
             if (ct.IsCancellationRequested)
                 break;
 
-            try
-            {
-                await ImportBySymbolAsync(
+            // 夜間バッチ文脈で日次株価をImportする
+            var priceSummary =
+                await _priceService.ImportAsync(
                     s.SymbolCode,
-                    maxPriceYears,
-                    maxEpsQuarters,
-                    ct
-                );
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(
-                    ex,
-                    "Import failed: {Symbol}",
-                    s.SymbolCode
-                );
-            }
+                    ImportExecutionContext.NightBatch,
+                    ct);
 
-            // ★ AlphaVantage レート制限対策（最低限）
+            // 夜間バッチ文脈でEPSをImportする
+            var epsSummary =
+                await _epsService.ImportAsync(
+                    s.SymbolCode,
+                    ImportExecutionContext.NightBatch,
+                    ct);
+
+            results.Add(new ImportSummary
+            {
+                Symbol = s.SymbolCode,
+                Price = priceSummary,
+                Eps = epsSummary
+            });
+
+            // Alpha Vantage API のレート制限対策として待機する
             await Task.Delay(TimeSpan.FromSeconds(15), ct);
         }
-    }
 
-    /// <summary>
-    /// 単一銘柄 Import（画面登録 / 手動実行）
-    /// </summary>
-    public async Task ImportBySymbolAsync(
-        string symbol,
-        int maxPriceYears,
-        int maxEpsQuarters,
-        CancellationToken ct)
-    {
-        symbol = symbol.Trim().ToUpper();
-
-        _logger.LogInformation("Import start: {Symbol}", symbol);
-
-        await ImportPriceAsync(symbol, maxPriceYears, ct);
-        await ImportEpsAsync(symbol, maxEpsQuarters, ct);
-
-        _logger.LogInformation("Import completed: {Symbol}", symbol);
-    }
-
-    // =====================================================
-    // 内部処理
-    // =====================================================
-
-    /// <summary>
-    /// 株価（日次）
-    /// ・DBにある最新日以降のみ取得
-    /// ・最大取得年数を考慮
-    /// </summary>
-    private async Task ImportPriceAsync(
-        string symbol,
-        int maxYears,
-        CancellationToken ct)
-    {
-        var entity =
-            await _symbolRepository.GetBySymbolAsync(symbol, DEFAULT_MARKET)
-            ?? throw new InvalidOperationException($"Symbol not found: {symbol}");
-
-        var latestDate =
-            await _priceDailyRepository.GetLatestTradeDateAsync(entity.Id);
-
-        var maxFromDate = DateTime.Today.AddYears(-maxYears);
-
-        var fromDate =
-            latestDate != null
-                ? latestDate.Value.AddDays(1)
-                : maxFromDate;
-
-        // 最大取得範囲より古くならないよう制御
-        if (fromDate < maxFromDate)
-            fromDate = maxFromDate;
-
-        if (fromDate > DateTime.Today)
-        {
-            _logger.LogInformation(
-                "Price already up-to-date: {Symbol}",
-                symbol
-            );
-            return;
-        }
-
-        _logger.LogInformation(
-            "Import price: {Symbol} from {From}",
-            symbol,
-            fromDate.ToString("yyyy-MM-dd")
-        );
-
-        await _externalImporter.ImportPriceAsync(symbol, fromDate);
-    }
-
-    /// <summary>
-    /// EPS（四半期）
-    /// ・決算日はズレるため毎回取得
-    /// ・Python 側で maxQuarters 制御
-    /// </summary>
-    private async Task ImportEpsAsync(
-        string symbol,
-        int maxQuarters,
-        CancellationToken ct)
-    {
-        _logger.LogInformation(
-            "Import EPS: {Symbol} (max {Count})",
-            symbol,
-            maxQuarters
-        );
-
-        await _externalImporter.ImportEpsAsync(symbol, maxQuarters);
+        return results;
     }
 }
