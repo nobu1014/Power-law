@@ -6,160 +6,147 @@
 
   /**
    * =====================================================
-   * 管理者Import画面
-   * ・Import 実行
-   * ・結果サマリ表示
+   * 管理者 Import 画面（Vuetify）
    * =====================================================
    */
 
   const router = useRouter()
   const authStore = useAuthStore()
 
-  /**
-   * =====================================================
-   * 初期チェック
-   * ・未ログインならログイン画面へ
-   * =====================================================
-   */
+  /* ---------------------------
+   * 認証チェック
+   * --------------------------- */
   onMounted(() => {
     if (!authStore.isLoggedIn) {
       router.push('/login')
     }
   })
 
-  /**
-   * =====================================================
-   * 画面状態
-   * =====================================================
-   */
+  /* ---------------------------
+   * State
+   * --------------------------- */
   const loading = ref(false)
   const symbol = ref('')
   const results = ref<any[]>([])
-  const error = ref<string | null>(null)
 
-  /**
-   * =====================================================
-   * API呼び出し
-   * =====================================================
-   */
+  /* Snackbar */
+  const snackbar = ref(false)
+  const snackbarText = ref('')
+  const snackbarColor = ref<'success' | 'error' | 'info'>('info')
 
-  /**
-   * 全銘柄 Import を実行する
-   */
+  function showMessage(text: string, color: 'success' | 'error' | 'info') {
+    snackbarText.value = text
+    snackbarColor.value = color
+    snackbar.value = true
+  }
+
+  /* ---------------------------
+   * API
+   * --------------------------- */
   async function importAll() {
     loading.value = true
-    error.value = null
+    results.value = []
+
+    showMessage('Import を実行中です…', 'info')
 
     try {
       const res = await api.post('/admin/import/all')
       results.value = res.data
+      showMessage('全銘柄 Import が完了しました', 'success')
     } catch (e: any) {
-      error.value = e?.message ?? 'Import failed'
+      handleError(e)
     } finally {
       loading.value = false
     }
   }
 
-  /**
-   * 指定銘柄 Import を実行する
-   */
   async function importBySymbol() {
     if (!symbol.value) return
 
     loading.value = true
-    error.value = null
+    results.value = []
+
+    showMessage('Import を実行中です…', 'info')
 
     try {
       const res = await api.post(`/admin/import/symbol/${symbol.value}`)
-      results.value = [res.data] // 単一結果なので配列に包む
+      results.value = [res.data]
+      showMessage(`${symbol.value} の Import が完了しました`, 'success')
     } catch (e: any) {
-      error.value = e?.message ?? 'Import failed'
+      handleError(e)
     } finally {
       loading.value = false
+    }
+  }
+
+  /* ---------------------------
+   * エラーハンドリング
+   * --------------------------- */
+  function handleError(e: any) {
+    if (e?.response?.status === 403) {
+      showMessage('管理者権限がありません', 'error')
+    } else {
+      showMessage('Import に失敗しました', 'error')
     }
   }
 </script>
 
 <template>
-  <div class="import-view">
-    <h1>Import 管理画面</h1>
+  <v-container>
+    <v-card>
+      <v-card-title>Import 管理画面</v-card-title>
 
-    <!-- 操作エリア -->
-    <section class="actions">
-      <button @click="importAll" :disabled="loading">全銘柄 Import 実行</button>
+      <v-card-text>
+        <!-- 操作エリア -->
+        <v-row class="mb-4">
+          <v-col cols="12">
+            <v-btn color="primary" :loading="loading" @click="importAll">
+              全銘柄 Import 実行
+            </v-btn>
+          </v-col>
 
-      <div class="symbol-import">
-        <input v-model="symbol" placeholder="Symbol (例: AAPL)" :disabled="loading" />
-        <button @click="importBySymbol" :disabled="loading">銘柄 Import</button>
-      </div>
-    </section>
+          <v-col cols="8">
+            <v-text-field v-model="symbol" label="Symbol（例: AAPL）" :disabled="loading" />
+          </v-col>
+          <v-col cols="4">
+            <v-btn color="secondary" :loading="loading" @click="importBySymbol">
+              銘柄 Import
+            </v-btn>
+          </v-col>
+        </v-row>
 
-    <!-- エラー表示 -->
-    <p v-if="error" class="error">
-      {{ error }}
-    </p>
+        <!-- 結果テーブル -->
+        <v-data-table v-if="results.length" :items="results" item-key="symbol">
+          <template #headers>
+            <tr>
+              <th>Symbol</th>
+              <th>Price Inserted</th>
+              <th>Price Skipped</th>
+              <th>Price Filled</th>
+              <th>Price Deleted</th>
+              <th>EPS Inserted</th>
+              <th>EPS Skipped</th>
+            </tr>
+          </template>
 
-    <!-- 結果表示 -->
-    <table v-if="results.length" class="result-table">
-      <thead>
-        <tr>
-          <th>Symbol</th>
-          <th>Price Inserted</th>
-          <th>Price Skipped</th>
-          <th>Price Filled</th>
-          <th>Price Deleted</th>
-          <th>EPS Inserted</th>
-          <th>EPS Skipped</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="r in results" :key="r.symbol">
-          <td>{{ r.symbol }}</td>
-          <td>{{ r.price.inserted }}</td>
-          <td>{{ r.price.skipped }}</td>
-          <td>{{ r.price.filled }}</td>
-          <td>{{ r.price.deleted }}</td>
-          <td>{{ r.eps.inserted }}</td>
-          <td>{{ r.eps.skipped }}</td>
-        </tr>
-      </tbody>
-    </table>
+          <template #item="{ item }">
+            <tr>
+              <td>{{ item.symbol }}</td>
+              <td>{{ item.price.inserted }}</td>
+              <td>{{ item.price.skipped }}</td>
+              <td>{{ item.price.filled }}</td>
+              <td>{{ item.price.deleted }}</td>
+              <td>{{ item.eps.inserted }}</td>
+              <td>{{ item.eps.skipped }}</td>
+            </tr>
+          </template>
+        </v-data-table>
+      </v-card-text>
+    </v-card>
 
-    <p v-if="loading">Import 実行中...</p>
-  </div>
+    <!-- Snackbar -->
+    <v-snackbar v-model="snackbar" :color="snackbarColor">
+      {{ snackbarText }}
+    </v-snackbar>
+  </v-container>
 </template>
-
-<style scoped>
-  .import-view {
-    padding: 24px;
-  }
-
-  .actions {
-    margin-bottom: 16px;
-  }
-
-  .symbol-import {
-    margin-top: 8px;
-  }
-
-  .result-table {
-    margin-top: 24px;
-    border-collapse: collapse;
-  }
-
-  .result-table th,
-  .result-table td {
-    border: 1px solid #ccc;
-    padding: 6px 10px;
-    text-align: right;
-  }
-
-  .result-table th:first-child,
-  .result-table td:first-child {
-    text-align: left;
-  }
-
-  .error {
-    color: red;
-  }
-</style>

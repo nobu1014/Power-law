@@ -683,6 +683,22 @@
       }
     })
   })
+
+  const basePriceInfo = computed(() => {
+    if (!result.value) return null
+
+    const series = getPriceSeries()
+    if (series.length === 0) return null
+
+    const latest = series[series.length - 1]!
+    const baseTarget = selectedDate.value ? new Date(selectedDate.value) : latest.date
+    const baseHit = findClosestOnOrBefore(series, baseTarget) ?? latest
+
+    return {
+      date: baseHit.date.toLocaleDateString(),
+      price: baseHit.value,
+    }
+  })
 </script>
 
 <template>
@@ -791,6 +807,15 @@
           <div class="chart-wrapper chart-height">
             <Line :data="chartData" :options="chartOptions" />
           </div>
+        </v-card>
+
+        <v-card
+          v-if="displayMode === 'price' && result && basePriceInfo"
+          class="pa-4 mb-2"
+          variant="outlined"
+        >
+          <div class="text-subtitle-2 mb-1">基準日：{{ basePriceInfo.date }}</div>
+          <div class="text-h6">株価：{{ basePriceInfo.price.toFixed(2) }}</div>
         </v-card>
 
         <!-- =============================

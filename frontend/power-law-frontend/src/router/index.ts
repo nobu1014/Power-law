@@ -34,6 +34,14 @@ const router = createRouter({
           name: 'drawdown',
           component: DrawdownListView,
         },
+        // router/index.ts
+        // ✅ 管理者 Import 画面
+        {
+          path: 'admin/import',
+          component: () => import('../views/admin/ImportView.vue'),
+
+          meta: { requiresAuth: true },
+        },
       ],
     },
   ],
