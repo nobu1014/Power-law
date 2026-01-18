@@ -801,7 +801,7 @@
 
           <v-row dense>
             <v-col v-for="item in priceSummary" :key="item.key" cols="6" md="4">
-              <v-chip size="small" variant="tonal" class="ma-1">
+              <v-chip size="small" variant="tonal" color="info" class="ma-1">
                 {{ item.label }}：
                 {{ item.average != null ? item.average.toFixed(2) : '—' }}
                 <span v-if="item.changeRate != null"> （{{ item.changeRate.toFixed(1) }}%） </span>
