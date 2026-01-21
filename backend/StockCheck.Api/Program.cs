@@ -44,6 +44,8 @@ builder.Services.AddAuthorization();
 // ===============================
 builder.Services.AddScoped<DbConnectionFactory>();
 builder.Services.AddSingleton<PythonProcessRunner>();
+// Import進捗通知用（SSE / 管理画面）
+builder.Services.AddSingleton<ImportProgressChannel>();
 
 // ===============================
 // Repositories

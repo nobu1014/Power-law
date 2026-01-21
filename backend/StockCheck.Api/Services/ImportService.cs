@@ -1,6 +1,6 @@
 using StockCheck.Api.Models.Import;
 using StockCheck.Api.Repositories;
-
+using StockCheck.Api.Infrastructure;
 namespace StockCheck.Api.Services;
 
 /// <summary>
@@ -11,6 +11,7 @@ public sealed class ImportService
     private readonly SymbolRepository _symbolRepository;
     private readonly PriceImportService _priceService;
     private readonly EpsImportService _epsService;
+    private readonly ImportProgressChannel _progressChannel;
 
     /// <summary>
     /// Importに必要なRepositoryと各Import Serviceを受け取る
@@ -18,11 +19,13 @@ public sealed class ImportService
     public ImportService(
         SymbolRepository symbolRepository,
         PriceImportService priceService,
-        EpsImportService epsService)
+        EpsImportService epsService,
+        ImportProgressChannel progressChannel)
     {
         _symbolRepository = symbolRepository;
         _priceService = priceService;
         _epsService = epsService;
+        _progressChannel = progressChannel;
     }
 
     /// <summary>
@@ -53,15 +56,14 @@ public sealed class ImportService
         };
     }
 
-    /// <summary>
-    /// 登録済みの全銘柄に対してImport処理を順次実行し、サマリ一覧を返す
+     /// <summary>
+    /// 【管理画面専用】
+    /// 全銘柄 Import（進捗通知あり）
     /// </summary>
-    public async Task<List<ImportSummary>> ImportAllAsync(
+    public async Task<List<ImportSummary>> ImportAllForAdminAsync(
         CancellationToken ct)
     {
         var results = new List<ImportSummary>();
-
-        // symbols テーブルに登録されている全銘柄を取得する
         var symbols = await _symbolRepository.GetAllAsync();
 
         foreach (var s in symbols)
@@ -69,31 +71,164 @@ public sealed class ImportService
             if (ct.IsCancellationRequested)
                 break;
 
-            // 夜間バッチ文脈で日次株価をImportする
-            var priceSummary =
-                await _priceService.ImportAsync(
-                    s.SymbolCode,
-                    ImportExecutionContext.NightBatch,
-                    ct);
-
-            // 夜間バッチ文脈でEPSをImportする
-            var epsSummary =
-                await _epsService.ImportAsync(
-                    s.SymbolCode,
-                    ImportExecutionContext.NightBatch,
-                    ct);
-
-            results.Add(new ImportSummary
+            // ===== 進捗：開始 =====
+            await _progressChannel.WriteAsync(new ImportProgress
             {
                 Symbol = s.SymbolCode,
-                Price = priceSummary,
-                Eps = epsSummary
+                Status = "start"
             });
 
-            // Alpha Vantage API のレート制限対策として待機する
+            try
+            {
+                var price =
+                    await _priceService.ImportAsync(
+                        s.SymbolCode,
+                        ImportExecutionContext.Manual,
+                        ct);
+
+                var eps =
+                    await _epsService.ImportAsync(
+                        s.SymbolCode,
+                        ImportExecutionContext.Manual,
+                        ct);
+
+                results.Add(new ImportSummary
+                {
+                    Symbol = s.SymbolCode,
+                    Price = price,
+                    Eps = eps
+                });
+
+                // ===== 進捗：成功 =====
+                await _progressChannel.WriteAsync(new ImportProgress
+                {
+                    Symbol = s.SymbolCode,
+                    Status = "success"
+                });
+            }
+            catch (Exception ex)
+            {
+                results.Add(new ImportSummary
+                {
+                    Symbol = s.SymbolCode,
+                    Error = ex.Message
+                });
+
+                // ===== 進捗：失敗 =====
+                await _progressChannel.WriteAsync(new ImportProgress
+                {
+                    Symbol = s.SymbolCode,
+                    Status = "failed",
+                    Error = ex.Message
+                });
+            }
+
             await Task.Delay(TimeSpan.FromSeconds(15), ct);
         }
 
         return results;
     }
+
+    /// <summary>
+    /// 【管理画面専用】
+    /// 指定銘柄について Import を実行する。
+    ///
+    /// ■ 特徴
+    /// ・例外を投げない
+    /// ・失敗理由は ImportSummary.Error に格納
+    /// ・ImportExecutionContext.Manual を使用
+    /// </summary>
+    public async Task<ImportSummary> ImportBySymbolForAdminAsync(
+        string symbol,
+        CancellationToken ct)
+    {
+        // 表記揺れ防止
+        symbol = symbol.Trim().ToUpperInvariant();
+
+        try
+        {
+            // 管理画面実行なので Manual 文脈を使用
+            var priceSummary =
+                await _priceService.ImportAsync(
+                    symbol,
+                    ImportExecutionContext.Manual,
+                    ct);
+
+            var epsSummary =
+                await _epsService.ImportAsync(
+                    symbol,
+                    ImportExecutionContext.Manual,
+                    ct);
+
+            return new ImportSummary
+            {
+                Symbol = symbol,
+                Price = priceSummary,
+                Eps = epsSummary,
+                Error = null
+            };
+        }
+        catch (Exception ex)
+        {
+            // ★重要★
+            // 管理画面では例外をそのまま返さず、
+            // Error として UI に返す
+            return new ImportSummary
+            {
+                Symbol = symbol,
+                Error = ex.Message
+            };
+        }
+    }
+
+    /// <summary>
+    /// 【NightBatch 専用】
+    /// 管理画面と同等の取得仕様で全銘柄 Import を実行する
+    /// ・必ず API を呼ぶ
+    /// ・失敗しても次の銘柄へ進む
+    /// ・進捗はログ出力のみ
+    /// </summary>
+    public async Task ImportAllForNightBatchAsync(
+        CancellationToken ct)
+    {
+        var symbols = await _symbolRepository.GetAllAsync();
+
+        foreach (var s in symbols)
+        {
+            if (ct.IsCancellationRequested)
+                break;
+
+            try
+            {
+                // ★ 管理画面と同じ Manual 文脈を使う
+                var price =
+                    await _priceService.ImportAsync(
+                        s.SymbolCode,
+                        ImportExecutionContext.Manual,
+                        ct);
+
+                var eps =
+                    await _epsService.ImportAsync(
+                        s.SymbolCode,
+                        ImportExecutionContext.Manual,
+                        ct);
+
+                // NightBatch は UI が無いのでログで可視化
+                Console.WriteLine(
+                    $"[NightBatch] {s.SymbolCode} " +
+                    $"Price(I:{price.Inserted},S:{price.Skipped}) " +
+                    $"EPS(I:{eps.Inserted},S:{eps.Skipped})");
+            }
+            catch (Exception ex)
+            {
+                // ★ 失敗しても NightBatch は止めない
+                Console.WriteLine(
+                    $"[NightBatch][ERROR] {s.SymbolCode} {ex.Message}");
+            }
+
+            // API制限対策
+            await Task.Delay(TimeSpan.FromSeconds(15), ct);
+        }
+    }
+
 }

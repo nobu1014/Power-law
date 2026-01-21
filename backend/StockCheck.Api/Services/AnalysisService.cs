@@ -63,48 +63,13 @@ public class AnalysisService
         var symbolId = symbolEntity.Id;
 
         // =====================================================
-        // ② API取得が必要かどうかを判断する（最重要）
+        // ② 最新データ取得保証（共通処理）
         // =====================================================
-
-        // 夜間バッチ時間帯（2:00〜4:00）は API 取得を行わない
-        // → バッチとの競合・レート制限事故を防ぐため
-        if (!IsNightBatchTime())
-        {
-            // ---------- 株価（日次）判定 ----------
-            var latestTradeDate =
-                await _priceDailyRepository.GetLatestTradeDateAsync(symbolId);
-
-            var previousBusinessDay =
-                GetPreviousBusinessDay(DateTime.Today);
-
-            bool needPriceImport;
-
-            if (latestTradeDate == null)
-            {
-                // DBに株価が1件も無い → 初回取得（full）
-                needPriceImport = true;
-            }
-            else if (latestTradeDate.Value.Date >= previousBusinessDay)
-            {
-                // 前営業日分まで揃っている → API取得不要
-                needPriceImport = false;
-            }
-            else
-            {
-                // データが欠損している → 差分取得（compact）
-                needPriceImport = true;
-            }
-
-            if (needPriceImport)
-            {
-                // ImportService に処理を完全委譲する
-                // ※ full / compact の判断は PriceImportService 側に任せる
-                await _importService.ImportBySymbolAsync(
-                    symbol,
-                    ImportExecutionContext.Analysis,
-                    CancellationToken.None);
-            }
-        }
+        await EnsureLatestDataAsync(
+            symbol,
+            market,
+            ImportExecutionContext.Analysis,
+            CancellationToken.None);
 
         // =====================================================
         // ③ 株価（日次）取得（DBキャッシュ）
@@ -217,6 +182,66 @@ public class AnalysisService
             Per = perResponse
         };
     }
+    /// <summary>
+    /// 【共通】
+    /// 分析画面・下落チェック共通で使用する。
+    /// 指定銘柄について「最新データ取得」を保証する。
+    /// ・DBを確認
+    /// ・必要ならAPI取得
+    /// ・NightBatch時間帯は取得しない
+    /// </summary>
+    public async Task EnsureLatestDataAsync(
+        string symbol,
+        string market,
+        ImportExecutionContext context,
+        CancellationToken ct)
+    {
+        // -----------------------------
+        // ① 正規化 & 登録保証
+        // -----------------------------
+        symbol = symbol.Trim().ToUpper();
+        market = market.Trim().ToUpper();
+
+        await _watchlistRepository.AddAsync(symbol, market);
+        await _symbolRepository.InsertIfNotExistsAsync(symbol, market, ct);
+
+        var symbolEntity =
+            await _symbolRepository.GetBySymbolAsync(symbol, market)
+            ?? throw new InvalidOperationException("Symbol registration failed.");
+
+        var symbolId = symbolEntity.Id;
+
+        // -----------------------------
+        // ② NightBatch時間帯はAPI取得しない
+        // -----------------------------
+        if (IsNightBatchTime())
+            return;
+
+        // -----------------------------
+        // ③ 最新株価の日付を確認
+        // -----------------------------
+        var latestTradeDate =
+            await _priceDailyRepository.GetLatestTradeDateAsync(symbolId);
+
+        var previousBusinessDay =
+            GetPreviousBusinessDay(DateTime.Today);
+
+        var needImport =
+            latestTradeDate == null
+            || latestTradeDate.Value.Date < previousBusinessDay;
+
+        // -----------------------------
+        // ④ 必要な場合のみ API取得
+        // -----------------------------
+        if (needImport)
+        {
+            await _importService.ImportBySymbolAsync(
+                symbol,
+                context,
+                ct);
+        }
+    }
+
 
     // =====================================================
     // 共通処理

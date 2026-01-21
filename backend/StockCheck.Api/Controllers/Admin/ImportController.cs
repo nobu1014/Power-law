@@ -30,8 +30,9 @@ public sealed class ImportController : ControllerBase
         _importService = importService;
     }
 
-    /// <summary>
-    /// 登録済みの全銘柄に対してImportを実行する（管理者専用）
+/// <summary>
+    /// 【管理画面】
+    /// 登録済みの全銘柄に対してImportを実行する
     /// </summary>
     [HttpPost("all")]
     public async Task<ActionResult<List<ImportSummary>>> ImportAll(
@@ -41,45 +42,40 @@ public sealed class ImportController : ControllerBase
         if (!IsAdmin())
             return Forbid();
 
-        // 全銘柄Importを実行し、結果サマリ一覧を返す
-        var result = await _importService.ImportAllAsync(ct);
+        // ★ 管理画面専用の安全な全件Importを呼び出す
+        var result = await _importService.ImportAllForAdminAsync(ct);
 
         return Ok(result);
     }
 
     /// <summary>
-    /// 指定銘柄に対してImportを実行する（管理者専用）
+    /// 【管理画面】
+    /// 指定銘柄 Import（安全版）
     /// </summary>
     [HttpPost("symbol/{symbol}")]
     public async Task<ActionResult<ImportSummary>> ImportBySymbol(
         string symbol,
         CancellationToken ct)
     {
-        // 管理者以外は実行不可
         if (!IsAdmin())
             return Forbid();
 
-        // 管理者手動実行は NightBatch 文脈として扱う
-        var result = await _importService.ImportBySymbolAsync(
-            symbol,
-            ImportExecutionContext.NightBatch,
-            ct);
+        // ★ NightBatch ではなく、管理画面専用メソッドを呼ぶ
+        var result =
+            await _importService.ImportBySymbolForAdminAsync(symbol, ct);
 
         return Ok(result);
     }
-
 
     /// <summary>
     /// 現在ログイン中のユーザーが管理者かどうかを判定する
     /// </summary>
     private bool IsAdmin()
     {
-        // 認証済みユーザーの login_id を取得する
         var loginId =
             User.Identity?.Name ??
             User.Claims.FirstOrDefault(c => c.Type == "login_id")?.Value;
 
-        // 特定の login_id のみ管理者として許可する
         return loginId == ADMIN_LOGIN_ID;
     }
 }

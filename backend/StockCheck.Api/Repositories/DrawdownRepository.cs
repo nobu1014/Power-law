@@ -60,4 +60,34 @@ public sealed class DrawdownRepository
 
         return result.ToList();
     }
+
+    /// <summary>
+    /// 下落チェック対象の銘柄一覧を取得する
+    /// （watchlist由来）
+    /// </summary>
+    public async Task<IReadOnlyList<(string Symbol, string Market)>> GetTargetSymbolsAsync()
+    {
+        const string sql = @"
+            SELECT DISTINCT
+                w.symbol,
+                w.market
+            FROM power_test.watchlist w
+            ORDER BY w.symbol;
+        ";
+
+        var list = new List<(string, string)>();
+
+        await using var conn = await _connectionFactory.CreateAsync();
+        var rows = await conn.QueryAsync(sql);
+
+        foreach (var row in rows)
+        {
+            list.Add((
+                (string)row.symbol,
+                (string)row.market
+            ));
+        }
+
+        return list;
+    }
 }

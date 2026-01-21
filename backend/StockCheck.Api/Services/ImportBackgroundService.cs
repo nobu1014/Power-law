@@ -46,10 +46,10 @@ public sealed class ImportBackgroundService : BackgroundService
                 var importService =
                     scope.ServiceProvider.GetRequiredService<ImportService>();
 
+                // 全銘柄のImportを実行する
                 _logger.LogInformation("Daily import started (02:00)");
 
-                // 全銘柄のImportを実行する
-                await importService.ImportAllAsync(stoppingToken);
+                await importService.ImportAllForNightBatchAsync(stoppingToken);
 
                 _logger.LogInformation("Daily import finished (02:00)");
             }

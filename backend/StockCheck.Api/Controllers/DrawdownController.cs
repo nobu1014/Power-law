@@ -46,4 +46,18 @@ public class DrawdownController : ControllerBase
 
         return Ok(result);
     }
+
+    /// <summary>
+    /// 下落チェック用の最新データを取得する
+    /// （重い処理・明示実行）
+    /// </summary>
+    [HttpPost("refresh")]
+    public async Task<IActionResult> Refresh(CancellationToken ct)
+    {
+        await _service.RefreshLatestDataAsync(ct);
+        return Ok(new
+        {
+            message = "最新データの取得が完了しました"
+        });
+    }
 }
