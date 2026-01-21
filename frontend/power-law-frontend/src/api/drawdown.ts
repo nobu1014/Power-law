@@ -15,3 +15,10 @@ export async function fetchDrawdownList(
 
   return res.data
 }
+
+/**
+ * 下落チェック用の最新データを取得する（重い）
+ */
+export async function refreshDrawdownData(): Promise<void> {
+  await axios.post('/api/drawdown/refresh')
+}

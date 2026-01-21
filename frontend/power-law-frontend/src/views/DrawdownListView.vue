@@ -1,13 +1,14 @@
 <script setup lang="ts">
   import { ref, onMounted } from 'vue'
-  import { fetchDrawdownList } from '../api/drawdown'
+  import { fetchDrawdownList, refreshDrawdownData } from '../api/drawdown'
   import type { DrawdownListItem } from '../types/drawdown'
   import { useRouter } from 'vue-router'
 
   const router = useRouter()
 
   const periodMonths = ref(3)
-  const loading = ref(false)
+  const loadingList = ref(false) // 下落チェック取得用
+  const loadingRefresh = ref(false) // 最新データ取得用
   const items = ref<DrawdownListItem[]>([])
 
   const periodOptions = [
@@ -24,12 +25,23 @@
     { title: '下落率', key: 'drawdownRate', align: 'center' },
   ] as const
 
-  async function load() {
-    loading.value = true
+  async function loadList() {
+    loadingList.value = true
     try {
       items.value = await fetchDrawdownList(periodMonths.value)
     } finally {
-      loading.value = false
+      loadingList.value = false
+    }
+  }
+
+  async function refreshLatestData() {
+    loadingRefresh.value = true
+    try {
+      await refreshDrawdownData()
+      // 取得完了後、最新DBで一覧を再取得
+      await loadList()
+    } finally {
+      loadingRefresh.value = false
     }
   }
 
@@ -48,7 +60,7 @@
     return 'grey'
   }
 
-  onMounted(load)
+  onMounted(loadList)
 </script>
 
 <template>
@@ -70,9 +82,29 @@
             />
           </v-col>
 
-          <v-col cols="12" md="2">
-            <v-btn color="primary" block :loading="loading" :disabled="loading" @click="load">
-              実行
+          <!-- 📉 下落チェック実行 -->
+          <v-col cols="12" md="3">
+            <v-btn
+              color="primary"
+              block
+              :loading="loadingList"
+              :disabled="loadingList || loadingRefresh"
+              @click="loadList"
+            >
+              下落チェック実行
+            </v-btn>
+          </v-col>
+
+          <!-- 🔄 最新データ取得 -->
+          <v-col cols="12" md="3">
+            <v-btn
+              color="secondary"
+              block
+              :loading="loadingRefresh"
+              :disabled="loadingRefresh || loadingList"
+              @click="refreshLatestData"
+            >
+              最新データ取得
             </v-btn>
           </v-col>
         </v-row>
@@ -89,13 +121,6 @@
           :mobile-breakpoint="0"
           @click:row="handleRowClick"
         >
-          <template #colgroup>
-            <col style="width: 25%" />
-            <col style="width: 25%" />
-            <col style="width: 25%" />
-            <col style="width: 25%" />
-          </template>
-
           <template #item.symbol="{ value }">
             <span class="font-weight-medium">{{ value }}</span>
           </template>
