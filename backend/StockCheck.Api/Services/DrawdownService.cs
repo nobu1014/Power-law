@@ -1,6 +1,7 @@
+using StockCheck.Api.Models.Import;
 using StockCheck.Api.Models.Responses;
 using StockCheck.Api.Repositories;
-using StockCheck.Api.Models.Import;
+
 
 namespace StockCheck.Api.Services;
 
@@ -10,57 +11,46 @@ namespace StockCheck.Api.Services;
 public class DrawdownService
 {
     private readonly DrawdownRepository _repository;
-    private readonly AnalysisService _analysisService;
+    private readonly ImportService _importService;
 
     public DrawdownService(
         DrawdownRepository repository,
-        AnalysisService analysisService)
+        ImportService importService)
     {
         _repository = repository;
-        _analysisService = analysisService;
+        _importService = importService;
     }
 
     /// <summary>
-    /// 【軽量】
-    /// 下落率一覧を取得（DB参照のみ）
+    /// 下落率一覧（DB参照のみ・高速）
     /// </summary>
     public async Task<IReadOnlyList<DrawdownListItemDto>> GetDrawdownListAsync(
         int periodMonths,
         string sortOrder = "desc")
     {
-        return await _repository.GetDrawdownListAsync(
-            periodMonths,
-            sortOrder
-        );
+        return await _repository.GetDrawdownListAsync(periodMonths, sortOrder);
     }
 
     /// <summary>
-    /// 【重い・明示実行】
-    /// 下落チェック対象銘柄の最新データを取得する
+    /// 下落チェック用：最新データ取得（重い・明示実行）
     /// </summary>
     public async Task RefreshLatestDataAsync(CancellationToken ct)
     {
+        // ウォッチリスト由来の銘柄一覧
         var symbols = await _repository.GetTargetSymbolsAsync();
 
-        using var semaphore = new SemaphoreSlim(3);
-
-        var tasks = symbols.Select(async s =>
+        foreach (var s in symbols)
         {
-            await semaphore.WaitAsync(ct);
-            try
-            {
-                await _analysisService.EnsureLatestDataAsync(
-                    s.Symbol,
-                    s.Market,
-                    ImportExecutionContext.Analysis,
-                    ct);
-            }
-            finally
-            {
-                semaphore.Release();
-            }
-        });
+            if (ct.IsCancellationRequested)
+                break;
 
-        await Task.WhenAll(tasks);
+            // ★ AnalysisService は使わない
+            // ★ ImportService を直接使う
+            await _importService.ImportBySymbolAsync(
+                s.Symbol,
+                ImportExecutionContext.Manual,
+                ct
+            );
+        }
     }
 }
