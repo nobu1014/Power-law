@@ -6,6 +6,7 @@ namespace StockCheck.Api.Repositories;
 
 /// <summary>
 /// 銘柄マスタ Repository
+/// DB: symbols テーブルを操作する
 /// </summary>
 public class SymbolRepository
 {
@@ -25,8 +26,9 @@ public class SymbolRepository
         string market,
         CancellationToken ct)
     {
-        const string sql = @"
-        INSERT INTO power_test.symbols (symbol, market)
+        // スキーマ名を appsettings.json から取得して SQL に組み込む
+        var sql = $@"
+        INSERT INTO {_connectionFactory.Schema}.symbols (symbol, market)
         VALUES (@symbol, @market)
         ON CONFLICT (symbol, market) DO NOTHING;
         ";
@@ -46,13 +48,13 @@ public class SymbolRepository
     /// </summary>
     public async Task<List<Symbol>> GetAllAsync()
     {
-        const string sql = @"
+        var sql = $@"
         SELECT
             id,
             symbol,
             market,
             created_at
-        FROM power_test.symbols
+        FROM {_connectionFactory.Schema}.symbols
         ORDER BY symbol;
         ";
 
@@ -81,13 +83,13 @@ public class SymbolRepository
     /// </summary>
     public async Task<Symbol?> GetBySymbolAsync(string symbol, string market)
     {
-        const string sql = @"
+        var sql = $@"
         SELECT
             id,
             symbol,
             market,
             created_at
-        FROM power_test.symbols
+        FROM {_connectionFactory.Schema}.symbols
         WHERE symbol = @symbol
           AND market = @market
         LIMIT 1;

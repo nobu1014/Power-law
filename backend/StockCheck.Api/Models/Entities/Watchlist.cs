@@ -2,27 +2,13 @@ namespace StockCheck.Api.Models.Entities;
 
 /// <summary>
 /// ウォッチリストエンティティ
-/// DB: power_test.watchlist と 1対1
+/// user_id でユーザーごとに管理される
 /// </summary>
 public class Watchlist
 {
-    /// <summary>
-    /// 主キー
-    /// </summary>
     public int Id { get; set; }
-
-    /// <summary>
-    /// 銘柄コード（例: AAPL）
-    /// </summary>
+    public int UserId { get; set; }  // ★ 追加
     public string Symbol { get; set; } = string.Empty;
-
-    /// <summary>
-    /// 市場（例: US）
-    /// </summary>
-    public string Market { get; set; } = "US";
-
-    /// <summary>
-    /// 登録日時
-    /// </summary>
+    public string Market { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
 }

@@ -6,6 +6,7 @@ namespace StockCheck.Api.Repositories;
 
 /// <summary>
 /// ユーザー Repository
+/// DB: users テーブルを操作する
 /// </summary>
 public class UserRepository
 {
@@ -17,18 +18,19 @@ public class UserRepository
     }
 
     /// <summary>
-    /// login_id からユーザー取得
+    /// login_id からユーザーを取得する
     /// </summary>
     public async Task<User?> GetByLoginIdAsync(string loginId)
     {
-        const string sql = @"
+        // スキーマ名を appsettings.json から取得して SQL に組み込む
+        var sql = $@"
         SELECT
             id,
             login_id,
             password_hash,
             is_active,
             created_at
-        FROM power_test.users
+        FROM {_connectionFactory.Schema}.users
         WHERE login_id = @login_id
         LIMIT 1;
         ";

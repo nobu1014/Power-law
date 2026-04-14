@@ -1,12 +1,9 @@
 namespace StockCheck.Api.Models.Requests;
 
 /// <summary>
-/// 株価分析（Phase0）リクエスト
-/// 
+/// 株価分析リクエスト
 /// ・銘柄は watchlist から選択、またはテキスト入力
 /// ・watchlist / symbols に存在しない場合は自動登録される
-/// ・株価 / EPS / PER はすべて毎回計算される
-/// ・表示切替はフロントエンド側で行う
 /// </summary>
 public class AnalysisRequest
 {
@@ -16,28 +13,24 @@ public class AnalysisRequest
     public string Symbol { get; set; } = string.Empty;
 
     /// <summary>
-    /// 市場（Phase0では US 固定）
+    /// 市場（US 固定）
     /// </summary>
     public string Market { get; set; } = "US";
 
-    // ===== 株価（基準期間方式） =====
+    /// <summary>
+    /// ログイン中ユーザーのID
+    /// Controller から設定される（フロントからは送らない）
+    /// watchlist への自動登録に使用する
+    /// </summary>
+    public int UserId { get; set; }
 
     /// <summary>
-    /// 株価の基準期間（年）
-    /// 1〜5 年を想定
+    /// 株価の基準期間（年）1〜5年
     /// </summary>
     public int? BaseYears { get; set; }
 
-    // ===== EPS / PER（分析レンジ方式） =====
-
     /// <summary>
-    /// EPS / PER の分析レンジ（決算期数）
-    /// 
-    /// 例:
-    /// 4  = 直近 4 期
-    /// 8  = 直近 8 期
-    /// 12 = 直近 12 期
-    /// 16 = 直近 16 期
+    /// EPS / PER の分析レンジ（決算期数）4 / 8 / 12 / 16
     /// </summary>
     public int? EpsRange { get; set; }
 }

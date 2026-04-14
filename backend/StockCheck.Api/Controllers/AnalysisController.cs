@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 using StockCheck.Api.Models.Requests;
-using StockCheck.Api.Models.Responses;
 using StockCheck.Api.Models.Analysis;
 using StockCheck.Api.Services;
 using StockCheck.Api.Repositories;
@@ -9,15 +8,11 @@ using StockCheck.Api.Repositories;
 namespace StockCheck.Api.Controllers;
 
 /// <summary>
-/// 株価分析（Phase0）Controller
-///
-/// 【役割】
-/// ・分析画面で使用する API エンドポイント
-/// ・ビジネスロジックは Service に完全委譲
+/// 株価分析 Controller
+/// ログインユーザーのウォッチリストを使って分析を行う
 /// </summary>
 [ApiController]
 [Route("api/analysis")]
-[AllowAnonymous]
 public class AnalysisController : ControllerBase
 {
     private readonly AnalysisService _analysisService;
@@ -32,17 +27,31 @@ public class AnalysisController : ControllerBase
     }
 
     /// <summary>
-    /// 分析画面用：ウォッチリスト銘柄一覧取得
+    /// Claim からログイン中ユーザーのIDを取得するヘルパー
+    /// 未ログインの場合は null を返す
+    /// </summary>
+    private int? GetUserId()
+    {
+        var value = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return int.TryParse(value, out var id) ? id : null;
+    }
+
+    /// <summary>
+    /// 分析画面用：ログインユーザーのウォッチリスト銘柄一覧取得
     /// </summary>
     [HttpGet("watchlist")]
     public async Task<IActionResult> GetWatchlist()
     {
-        var list = await _watchlistRepository.GetAllAsync();
+        // ログインユーザーのIDを取得する
+        var userId = GetUserId();
+        if (userId == null) return Unauthorized();
+
+        var list = await _watchlistRepository.GetAllAsync(userId.Value);
         return Ok(list);
     }
 
     /// <summary>
-    /// 株価分析実行（Phase0）
+    /// 株価分析実行
     /// </summary>
     [HttpPost("execute")]
     public async Task<ActionResult<AnalysisResultDto>> Execute(
@@ -51,11 +60,16 @@ public class AnalysisController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Symbol))
             return BadRequest("Symbol is required.");
 
+        // ログインユーザーのIDをリクエストにセットする
+        // （フロントからは送らず、サーバー側で付与する）
+        var userId = GetUserId();
+        if (userId == null) return Unauthorized();
+        request.UserId = userId.Value;
+
         var symbol = request.Symbol.Trim().ToUpperInvariant();
 
         // Service 実行
-        AnalysisResponse analysis =
-            await _analysisService.AnalyzeAsync(request);
+        var analysis = await _analysisService.AnalyzeAsync(request);
 
         // DTO 変換
         var dto = new AnalysisResultDto
@@ -88,7 +102,6 @@ public class AnalysisController : ControllerBase
                 })
                 .ToList(),
 
-            // Phase0 では Metrics は空で返す（後続で詰める）
             Metrics = new AnalysisMetricsDto()
         };
 

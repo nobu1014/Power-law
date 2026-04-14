@@ -6,12 +6,8 @@ namespace StockCheck.Api.Repositories;
 
 /// <summary>
 /// ウォッチリスト Repository
-/// DB: power_test.watchlist を操作する
-/// 
-/// 方針:
-/// - symbols テーブルとは紐付けない
-/// - symbol / market をそのまま保持
-/// - UNIQUE(symbol, market) により重複を防止
+/// DB: watchlist テーブルを操作する
+/// user_id でユーザーごとに分離されている
 /// </summary>
 public class WatchlistRepository
 {
@@ -25,17 +21,18 @@ public class WatchlistRepository
     /// <summary>
     /// ウォッチリストに追加（既に存在する場合は何もしない）
     /// </summary>
-    public async Task AddAsync(string symbol, string market)
+    public async Task AddAsync(int userId, string symbol, string market)
     {
-        const string sql = @"
-        INSERT INTO power_test.watchlist (symbol, market)
-        VALUES (@symbol, @market)
-        ON CONFLICT (symbol, market) DO NOTHING;
+        var sql = $@"
+        INSERT INTO {_connectionFactory.Schema}.watchlist (user_id, symbol, market)
+        VALUES (@userId, @symbol, @market)
+        ON CONFLICT (user_id, symbol, market) DO NOTHING;
         ";
 
         await using var conn = await _connectionFactory.CreateAsync();
         await using var cmd = new NpgsqlCommand(sql, conn);
 
+        cmd.Parameters.AddWithValue("userId", userId);
         cmd.Parameters.AddWithValue("symbol", symbol);
         cmd.Parameters.AddWithValue("market", market);
 
@@ -45,17 +42,19 @@ public class WatchlistRepository
     /// <summary>
     /// ウォッチリストから削除
     /// </summary>
-    public async Task RemoveAsync(string symbol, string market)
+    public async Task RemoveAsync(int userId, string symbol, string market)
     {
-        const string sql = @"
-        DELETE FROM power_test.watchlist
-        WHERE symbol = @symbol
+        var sql = $@"
+        DELETE FROM {_connectionFactory.Schema}.watchlist
+        WHERE user_id = @userId
+        AND symbol = @symbol
         AND market = @market;
         ";
 
         await using var conn = await _connectionFactory.CreateAsync();
         await using var cmd = new NpgsqlCommand(sql, conn);
 
+        cmd.Parameters.AddWithValue("userId", userId);
         cmd.Parameters.AddWithValue("symbol", symbol);
         cmd.Parameters.AddWithValue("market", market);
 
@@ -63,17 +62,19 @@ public class WatchlistRepository
     }
 
     /// <summary>
-    /// ウォッチリスト一覧取得
+    /// ウォッチリスト一覧取得（ログインユーザーのみ）
     /// </summary>
-    public async Task<List<Watchlist>> GetAllAsync()
+    public async Task<List<Watchlist>> GetAllAsync(int userId)
     {
-        const string sql = @"
+        var sql = $@"
         SELECT
             id,
+            user_id,
             symbol,
             market,
             created_at
-        FROM power_test.watchlist
+        FROM {_connectionFactory.Schema}.watchlist
+        WHERE user_id = @userId
         ORDER BY created_at DESC;
         ";
 
@@ -81,6 +82,9 @@ public class WatchlistRepository
 
         await using var conn = await _connectionFactory.CreateAsync();
         await using var cmd = new NpgsqlCommand(sql, conn);
+
+        cmd.Parameters.AddWithValue("userId", userId);
+
         await using var reader = await cmd.ExecuteReaderAsync();
 
         while (await reader.ReadAsync())
@@ -88,9 +92,10 @@ public class WatchlistRepository
             list.Add(new Watchlist
             {
                 Id = reader.GetInt32(0),
-                Symbol = reader.GetString(1),
-                Market = reader.GetString(2),
-                CreatedAt = reader.GetDateTime(3)
+                UserId = reader.GetInt32(1),
+                Symbol = reader.GetString(2),
+                Market = reader.GetString(3),
+                CreatedAt = reader.GetDateTime(4)
             });
         }
 
@@ -98,14 +103,15 @@ public class WatchlistRepository
     }
 
     /// <summary>
-    /// ウォッチリストに存在するか判定
+    /// ウォッチリストに存在するか判定（ユーザー別）
     /// </summary>
-    public async Task<bool> ExistsAsync(string symbol, string market)
+    public async Task<bool> ExistsAsync(int userId, string symbol, string market)
     {
-        const string sql = @"
+        var sql = $@"
         SELECT 1
-        FROM power_test.watchlist
-        WHERE symbol = @symbol
+        FROM {_connectionFactory.Schema}.watchlist
+        WHERE user_id = @userId
+        AND symbol = @symbol
         AND market = @market
         LIMIT 1;
         ";
@@ -113,6 +119,7 @@ public class WatchlistRepository
         await using var conn = await _connectionFactory.CreateAsync();
         await using var cmd = new NpgsqlCommand(sql, conn);
 
+        cmd.Parameters.AddWithValue("userId", userId);
         cmd.Parameters.AddWithValue("symbol", symbol);
         cmd.Parameters.AddWithValue("market", market);
 
