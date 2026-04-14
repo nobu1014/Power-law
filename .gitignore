@@ -1,24 +1,23 @@
-# ===== Frontend (Vue / Vite) =====
-frontend/power-law-frontend/dist/
-frontend/power-law-frontend/node_modules/
-frontend/power-law-frontend/node_modules/.vite/
+# ===========================
+# 機密情報を含む設定ファイル
+# GitHubに上げない
+# ===========================
+backend/StockCheck.Api/appsettings.Development.json
+backend/StockCheck.Api/appsettings.Production.json
 
-# ===== Backend (.NET) =====
+# Python仮想環境
+python/.venv/
+
+# ビルド成果物
 backend/StockCheck.Api/bin/
 backend/StockCheck.Api/obj/
 
-# ===== Publish / Deploy =====
-deploy/
+# Node.js
+frontend/node_modules/
 
-# ===== Logs =====
-*.log
-RELEASE.log
+# VS Code
+.vscode/
 
-# installer / temp
-*.deb
-
-# local only
-cookie.txt
-curl
-frontend/npm/
-.vscode/settings.json
+# その他
+*.user
+.DS_Store
