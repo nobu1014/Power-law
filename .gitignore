@@ -1,23 +1,28 @@
 # ===========================
 # 機密情報を含む設定ファイル
-# GitHubに上げない
 # ===========================
 backend/StockCheck.Api/appsettings.Development.json
 backend/StockCheck.Api/appsettings.Production.json
 
+# デプロイ用バイナリ（コミット不要）
+backend/StockCheck.Api/~/
+backend/**/bin/
+backend/**/obj/
+
+# フロントエンドビルド成果物
+frontend/**/dist/
+
 # Python仮想環境
 python/.venv/
 
-# ビルド成果物
-backend/StockCheck.Api/bin/
-backend/StockCheck.Api/obj/
-
 # Node.js
-frontend/node_modules/
+frontend/**/node_modules/
 
 # VS Code
 .vscode/
 
-# その他
+# 機密・一時ファイル
+cookie.txt
+curl
 *.user
 .DS_Store
