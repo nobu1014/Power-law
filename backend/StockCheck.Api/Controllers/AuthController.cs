@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using System.Security.Claims;
 using StockCheck.Api.Models.Requests;
+using StockCheck.Api.Models.Entities;   // ← User クラスの名前空間
 using StockCheck.Api.Services;
 
 namespace StockCheck.Api.Controllers;
@@ -24,20 +25,25 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
-        var success = await _authService.LoginAsync(request);
-        if (!success)
+        // ログイン処理（成功時はUserオブジェクトが返る）
+        var user = await _authService.LoginAsync(request);
+        if (user == null)
         {
             return Unauthorized();
         }
 
-        // ★ 管理者判定（要件どおり）
-        var isAdmin = request.LoginId == "nobu1014b.b";
+        // 管理者判定
+        var isAdmin = user.LoginId == "nobu1014b.b";
 
+        // Claimにユーザーの情報を設定する
+        // NameIdentifier にDBのidを入れることで
+        // 各Controllerでログイン中ユーザーのidが取得できる
         var claims = new List<Claim>
-    {
-        new Claim(ClaimTypes.Name, request.LoginId),
-        new Claim("IsAdmin", isAdmin.ToString())
-    };
+        {
+            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()), // ★ DBのidを追加
+            new Claim(ClaimTypes.Name, user.LoginId),
+            new Claim("IsAdmin", isAdmin.ToString())
+        };
 
         var identity = new ClaimsIdentity(
             claims,
@@ -51,11 +57,10 @@ public class AuthController : ControllerBase
 
         return Ok(new
         {
-            loginId = request.LoginId,
+            loginId = user.LoginId,
             isAdmin
         });
     }
-
 
     /// <summary>
     /// ログアウト
