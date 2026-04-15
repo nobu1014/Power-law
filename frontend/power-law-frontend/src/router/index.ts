@@ -23,7 +23,6 @@ const router = createRouter({
       children: [
         { path: 'symbols', component: SymbolRegisterPage },
         { path: 'watchlist', component: WatchlistPage },
-
         {
           path: 'analysis',
           name: 'analysis',
@@ -34,12 +33,24 @@ const router = createRouter({
           name: 'drawdown',
           component: DrawdownListView,
         },
-        // router/index.ts
-        // ✅ 管理者 Import 画面
+        // 指値計算 パターン①
+        {
+          path: 'limit-price/pattern1',
+          name: 'limitPricePattern1',
+          component: () => import('../views/LimitPricePage.vue'),
+          props: { pattern: 1 },
+        },
+        // 指値計算 パターン②
+        {
+          path: 'limit-price/pattern2',
+          name: 'limitPricePattern2',
+          component: () => import('../views/LimitPricePage.vue'),
+          props: { pattern: 2 },
+        },
+        // 管理者 Import 画面
         {
           path: 'admin/import',
           component: () => import('../views/admin/ImportView.vue'),
-
           meta: { requiresAuth: true },
         },
       ],

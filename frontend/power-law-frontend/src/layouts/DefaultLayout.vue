@@ -4,14 +4,6 @@
   import { useDisplay } from 'vuetify'
   import { useAuthStore } from '../stores/auth'
 
-  /**
-   * =====================================================
-   * メインレイアウト
-   * ・通常メニュー
-   * ・管理者メニュー（Import管理）
-   * =====================================================
-   */
-
   const router = useRouter()
   const authStore = useAuthStore()
   const { smAndDown } = useDisplay()
@@ -26,6 +18,8 @@
     { title: 'ウォッチリスト', to: '/watchlist', icon: 'mdi-eye' },
     { title: '株価分析', to: '/analysis', icon: 'mdi-chart-line' },
     { title: '下落チェック', to: '/drawdown', icon: 'mdi-trending-down' },
+    { title: '指値①', to: '/limit-price/pattern1', icon: 'mdi-tag-arrow-down' },
+    { title: '指値②', to: '/limit-price/pattern2', icon: 'mdi-tag-arrow-down-outline' },
   ]
 
   /**
@@ -88,9 +82,7 @@
           <template #prepend>
             <v-icon>{{ m.icon }}</v-icon>
           </template>
-          <v-list-item-title>
-            {{ m.title }}
-          </v-list-item-title>
+          <v-list-item-title>{{ m.title }}</v-list-item-title>
         </v-list-item>
 
         <!-- 管理者メニュー -->
@@ -106,9 +98,7 @@
           <template #prepend>
             <v-icon color="amber">{{ m.icon }}</v-icon>
           </template>
-          <v-list-item-title>
-            {{ m.title }}
-          </v-list-item-title>
+          <v-list-item-title>{{ m.title }}</v-list-item-title>
         </v-list-item>
       </v-list>
     </v-navigation-drawer>
