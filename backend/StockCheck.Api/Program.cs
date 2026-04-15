@@ -58,6 +58,7 @@ builder.Services.AddScoped<EpsPriceRepository>();
 builder.Services.AddScoped<DrawdownRepository>();
 builder.Services.AddScoped<PriceImportRepository>();
 builder.Services.AddScoped<EpsImportRepository>();
+builder.Services.AddScoped<LimitPriceSettingsRepository>();
 
 // ===============================
 // Services
@@ -69,6 +70,7 @@ builder.Services.AddSingleton<PasswordHasher>();
 builder.Services.AddScoped<ImportService>();
 builder.Services.AddScoped<PriceImportService>();
 builder.Services.AddScoped<EpsImportService>();
+builder.Services.AddScoped<LimitPriceService>();
 
 // Background
 builder.Services.AddHostedService<ImportBackgroundService>();
