@@ -2,11 +2,11 @@ using StockCheck.Api.Models.Import;
 using StockCheck.Api.Models.Responses;
 using StockCheck.Api.Repositories;
 
-
 namespace StockCheck.Api.Services;
 
 /// <summary>
 /// 株価下落チェック Service
+/// ログインユーザーのウォッチリスト銘柄を対象に下落率を計算する
 /// </summary>
 public class DrawdownService
 {
@@ -22,30 +22,32 @@ public class DrawdownService
     }
 
     /// <summary>
-    /// 下落率一覧（DB参照のみ・高速）
+    /// ログインユーザーの下落率一覧を取得する（DB参照のみ・高速）
     /// </summary>
     public async Task<IReadOnlyList<DrawdownListItemDto>> GetDrawdownListAsync(
+        int userId,
         int periodMonths,
         string sortOrder = "desc")
     {
-        return await _repository.GetDrawdownListAsync(periodMonths, sortOrder);
+        // ログインユーザーのウォッチリスト銘柄のみを対象にする
+        return await _repository.GetDrawdownListAsync(userId, periodMonths, sortOrder);
     }
 
     /// <summary>
-    /// 下落チェック用：最新データ取得（重い・明示実行）
+    /// ログインユーザーのウォッチリスト銘柄の最新データを取得する
+    /// （重い処理・明示実行）
     /// </summary>
-    public async Task RefreshLatestDataAsync(CancellationToken ct)
+    public async Task RefreshLatestDataAsync(int userId, CancellationToken ct)
     {
-        // ウォッチリスト由来の銘柄一覧
-        var symbols = await _repository.GetTargetSymbolsAsync();
+        // ログインユーザーのウォッチリスト銘柄一覧を取得する
+        var symbols = await _repository.GetTargetSymbolsAsync(userId);
 
         foreach (var s in symbols)
         {
             if (ct.IsCancellationRequested)
                 break;
 
-            // ★ AnalysisService は使わない
-            // ★ ImportService を直接使う
+            // ImportService を直接使って最新データを取得する
             await _importService.ImportBySymbolAsync(
                 s.Symbol,
                 ImportExecutionContext.Manual,

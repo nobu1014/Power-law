@@ -1,41 +1,30 @@
 using Dapper;
 using Npgsql;
+using StockCheck.Api.Infrastructure;
 using StockCheck.Api.Models.Entities;
 
 namespace StockCheck.Api.Repositories;
 
 /// <summary>
 /// EPS × 株価（四半期）取得用 Repository
-///
-/// 【責務】
-/// ・eps_price_recent_view からデータを取得
-/// ・「DBにどれだけEPSがあるか」を返す
-/// ・Import が必要かどうかの判断材料を提供
 /// </summary>
 public class EpsPriceRepository
 {
-    private readonly string _connectionString;
+    private readonly DbConnectionFactory _db;
 
-    public EpsPriceRepository(IConfiguration configuration)
+    public EpsPriceRepository(DbConnectionFactory db)
     {
-        _connectionString = configuration.GetConnectionString("Postgres")
-            ?? throw new InvalidOperationException("Connection string not found.");
+        _db = db;
     }
 
-    // =====================================================
-    // 取得系（表示用）
-    // =====================================================
-
     /// <summary>
-    /// 指定銘柄の EPS × 株価（四半期）を直近順で取得
+    /// 指定銘柄のEPS×株価を直近順で取得する
     /// </summary>
-    public async Task<List<EpsPriceRow>> GetRecentAsync(
-        int symbolId,
-        int range)
+    public async Task<List<EpsPriceRow>> GetRecentAsync(int symbolId, int range)
     {
         range = Math.Clamp(range, 1, 32);
 
-        const string sql = """
+        var sql = $"""
             SELECT
                 fiscal_year               AS FiscalYear,
                 fiscal_quarter            AS FiscalQuarter,
@@ -43,74 +32,57 @@ public class EpsPriceRepository
                 close_price_before_report AS ClosePrice,
                 report_date               AS TradeDate,
                 per                       AS Per
-            FROM power_test.eps_price_recent_view
+            FROM {_db.Schema}.eps_price_recent_view
             WHERE symbol_id = @SymbolId
             ORDER BY fiscal_year DESC, fiscal_quarter DESC
             LIMIT @Limit
         """;
 
-        await using var conn = new NpgsqlConnection(_connectionString);
+        await using var conn = await _db.CreateAsync();
 
-        var result = await conn.QueryAsync<EpsPriceRow>(
-            sql,
-            new
-            {
-                SymbolId = symbolId,
-                Limit = range
-            });
+        var result = await conn.QueryAsync<EpsPriceRow>(sql, new
+        {
+            SymbolId = symbolId,
+            Limit = range
+        });
 
         return result.ToList();
     }
 
-    // =====================================================
-    // 判定系（Service 用）
-    // =====================================================
-
     /// <summary>
-    /// 指定銘柄の EPS 件数を取得
-    /// Import が必要かどうかの判定用
+    /// 指定銘柄のEPS件数を取得する（Import判定用）
     /// </summary>
     public async Task<int> CountAsync(int symbolId)
     {
-        const string sql = """
+        var sql = $"""
             SELECT COUNT(*)
-            FROM power_test.eps_quarterly
+            FROM {_db.Schema}.eps_quarterly
             WHERE symbol_id = @SymbolId
         """;
 
-        await using var conn = new NpgsqlConnection(_connectionString);
+        await using var conn = await _db.CreateAsync();
 
-        return await conn.ExecuteScalarAsync<int>(
-            sql,
-            new { SymbolId = symbolId }
-        );
+        return await conn.ExecuteScalarAsync<int>(sql, new { SymbolId = symbolId });
     }
 
     /// <summary>
-    /// 指定銘柄の最新 EPS 期を取得
+    /// 指定銘柄の最新EPS期を取得する
     /// </summary>
-    public async Task<(int FiscalYear, int FiscalQuarter)?> GetLatestPeriodAsync(
-        int symbolId)
+    public async Task<(int FiscalYear, int FiscalQuarter)?> GetLatestPeriodAsync(int symbolId)
     {
-        const string sql = """
+        var sql = $"""
             SELECT fiscal_year, fiscal_quarter
-            FROM power_test.eps_quarterly
+            FROM {_db.Schema}.eps_quarterly
             WHERE symbol_id = @SymbolId
             ORDER BY fiscal_year DESC, fiscal_quarter DESC
             LIMIT 1
         """;
 
-        await using var conn = new NpgsqlConnection(_connectionString);
+        await using var conn = await _db.CreateAsync();
 
-        var result = await conn.QueryFirstOrDefaultAsync(sql, new
-        {
-            SymbolId = symbolId
-        });
+        var result = await conn.QueryFirstOrDefaultAsync(sql, new { SymbolId = symbolId });
 
-        if (result == null)
-        {
-            return null;
-        }
+        if (result == null) return null;
 
         return ((int)result.fiscal_year, (int)result.fiscal_quarter);
     }

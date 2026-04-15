@@ -1,8 +1,13 @@
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using StockCheck.Api.Services;
 
 namespace StockCheck.Api.Controllers;
 
+/// <summary>
+/// 下落チェック Controller
+/// ログインユーザーのウォッチリスト銘柄を対象に下落率を取得する
+/// </summary>
 [ApiController]
 [Route("api/drawdown")]
 public class DrawdownController : ControllerBase
@@ -15,31 +20,36 @@ public class DrawdownController : ControllerBase
     }
 
     /// <summary>
-    /// ウォッチ銘柄の下落率一覧を取得する
+    /// Claim からログイン中ユーザーのIDを取得するヘルパー
+    /// 未ログインの場合は null を返す
     /// </summary>
-    /// <param name="periodMonths">
-    /// 対象期間（月）:
-    /// 1=1か月, 3=3か月, 6=6か月, 12=1年
-    /// </param>
-    /// <param name="sortOrder">asc / desc（省略時 desc）</param>
+    private int? GetUserId()
+    {
+        var value = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return int.TryParse(value, out var id) ? id : null;
+    }
+
+    /// <summary>
+    /// ログインユーザーのウォッチ銘柄の下落率一覧を取得する
+    /// </summary>
     [HttpGet]
     public async Task<IActionResult> Get(
         [FromQuery] int periodMonths = 3,
         [FromQuery] string sortOrder = "desc")
     {
-        // 🔒 想定外の値を防ぐ（UIと仕様を一致させる）
+        // ログインユーザーのIDを取得する
+        var userId = GetUserId();
+        if (userId == null) return Unauthorized();
+
         var allowedPeriods = new[] { 1, 3, 6, 12 };
         if (!allowedPeriods.Contains(periodMonths))
-        {
             return BadRequest("periodMonths must be 1, 3, 6, or 12.");
-        }
 
         if (sortOrder != "asc" && sortOrder != "desc")
-        {
             sortOrder = "desc";
-        }
 
         var result = await _service.GetDrawdownListAsync(
+            userId.Value,
             periodMonths,
             sortOrder
         );
@@ -48,16 +58,18 @@ public class DrawdownController : ControllerBase
     }
 
     /// <summary>
-    /// 下落チェック用の最新データを取得する
+    /// ログインユーザーのウォッチリスト銘柄の最新データを取得する
     /// （重い処理・明示実行）
     /// </summary>
     [HttpPost("refresh")]
     public async Task<IActionResult> Refresh(CancellationToken ct)
     {
-        await _service.RefreshLatestDataAsync(ct);
-        return Ok(new
-        {
-            message = "最新データの取得が完了しました"
-        });
+        // ログインユーザーのIDを取得する
+        var userId = GetUserId();
+        if (userId == null) return Unauthorized();
+
+        await _service.RefreshLatestDataAsync(userId.Value, ct);
+
+        return Ok(new { message = "最新データの取得が完了しました" });
     }
 }

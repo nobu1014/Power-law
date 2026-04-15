@@ -6,11 +6,7 @@ namespace StockCheck.Api.Repositories;
 
 /// <summary>
 /// 日次株価 Repository
-/// DB: power_test.price_daily
-/// 
-/// 方針:
-/// ・平均値やYTDの計算は Service 層で行う
-/// ・Repository は「期間指定でデータを返す」ことに専念する
+/// DB: price_daily テーブルを操作する
 /// </summary>
 public class PriceDailyRepository
 {
@@ -24,22 +20,14 @@ public class PriceDailyRepository
     /// <summary>
     /// 指定期間の株価（日次）を取得する
     /// </summary>
-    /// <param name="symbolId">symbols.id</param>
-    /// <param name="from">開始日（含む）</param>
-    /// <param name="to">終了日（含む）</param>
     public async Task<List<PriceDaily>> GetByDateRangeAsync(
         int symbolId,
         DateTime from,
         DateTime to)
     {
-        const string sql = @"
-        SELECT
-            id,
-            symbol_id,
-            trade_date,
-            close_price,
-            created_at
-        FROM power_test.price_daily
+        var sql = $@"
+        SELECT id, symbol_id, trade_date, close_price, created_at
+        FROM {_connectionFactory.Schema}.price_daily
         WHERE symbol_id = @symbolId
         AND trade_date BETWEEN @from AND @to
         ORDER BY trade_date;
@@ -72,19 +60,13 @@ public class PriceDailyRepository
     }
 
     /// <summary>
-    /// 指定日以前の最新株価を取得する
-    /// （PER計算用・直近株価取得用）
+    /// 指定銘柄の最新株価を取得する
     /// </summary>
     public async Task<PriceDaily?> GetLatestAsync(int symbolId)
     {
-        const string sql = @"
-        SELECT
-            id,
-            symbol_id,
-            trade_date,
-            close_price,
-            created_at
-        FROM power_test.price_daily
+        var sql = $@"
+        SELECT id, symbol_id, trade_date, close_price, created_at
+        FROM {_connectionFactory.Schema}.price_daily
         WHERE symbol_id = @symbolId
         ORDER BY trade_date DESC
         LIMIT 1;
@@ -113,18 +95,16 @@ public class PriceDailyRepository
     }
 
     /// <summary>
-    /// 指定銘柄の期間内最高値を取得
+    /// 指定銘柄の期間内最高値を取得する
     /// </summary>
-    public async Task<decimal?> GetPeakPriceAsync(
-        int symbolId,
-        DateTime fromDate)
+    public async Task<decimal?> GetPeakPriceAsync(int symbolId, DateTime fromDate)
     {
-        const string sql = @"
+        var sql = $@"
         SELECT MAX(close_price)
-        FROM power_test.price_daily
+        FROM {_connectionFactory.Schema}.price_daily
         WHERE symbol_id = @symbolId
         AND trade_date >= @fromDate;
-    ";
+        ";
 
         await using var conn = await _connectionFactory.CreateAsync();
         await using var cmd = new NpgsqlCommand(sql, conn);
@@ -137,13 +117,13 @@ public class PriceDailyRepository
     }
 
     /// <summary>
-/// 指定銘柄の最新取引日を取得する
-/// </summary>
+    /// 指定銘柄の最新取引日を取得する
+    /// </summary>
     public async Task<DateTime?> GetLatestTradeDateAsync(int symbolId)
     {
-        const string sql = @"
+        var sql = $@"
             SELECT MAX(trade_date)
-            FROM power_test.price_daily
+            FROM {_connectionFactory.Schema}.price_daily
             WHERE symbol_id = @symbolId;
         ";
 
@@ -154,24 +134,14 @@ public class PriceDailyRepository
 
         var result = await cmd.ExecuteScalarAsync();
 
-        if (result == null || result == DBNull.Value)
-        {
-            return null;
-        }
+        if (result == null || result == DBNull.Value) return null;
 
-        // PostgreSQL date → DateOnly → DateTime
         if (result is DateOnly dateOnly)
-        {
             return dateOnly.ToDateTime(TimeOnly.MinValue);
-        }
 
-        // 念のための保険（timestamp に変わった場合）
         if (result is DateTime dateTime)
-        {
             return dateTime;
-        }
 
-        throw new InvalidCastException(
-            $"Unexpected date type: {result.GetType()}");
+        throw new InvalidCastException($"Unexpected date type: {result.GetType()}");
     }
 }
